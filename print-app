@@ -1,0 +1,2571 @@
+```html
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>استوديو المطابع الاحترافي | القص الذكي وترتيب المستمسكات على ورقة A4</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Google Fonts: Cairo & Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    
+    <!-- Cropper.js CSS & JS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
+    
+    <!-- jsPDF & html2canvas for High-Res PDF Export -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Cairo', 'Inter', 'sans-serif'],
+                        mono: ['Inter', 'monospace']
+                    },
+                    colors: {
+                        brand: {
+                            50: '#eff6ff',
+                            100: '#dbeafe',
+                            500: '#3b82f6',
+                            600: '#2563eb',
+                            700: '#1d4ed8',
+                            800: '#1e40af',
+                            900: '#1e3a8a',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body {
+            font-family: 'Cairo', sans-serif;
+            background-color: #f1f5f9;
+            color: #0f172a;
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #e2e8f0;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #94a3b8;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #64748b;
+        }
+
+        /* Cropper Container Styling */
+        .cropper-wrapper {
+            height: 410px;
+            background-color: #0f172a;
+            background-image: radial-gradient(#334155 1px, transparent 1px);
+            background-size: 16px 16px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* Visual Filter Preview on Cropper Canvas */
+        .cropper-wrapper.filter-preview-active .cropper-canvas,
+        .cropper-wrapper.filter-preview-active .cropper-view-box img {
+            filter: var(--live-crop-filter, none);
+        }
+
+        /* 4-Point Perspective Canvas Styling */
+        #perspective-canvas {
+            max-width: 100%;
+            max-height: 100%;
+            cursor: crosshair;
+            touch-action: none;
+            filter: var(--live-crop-filter, none);
+        }
+
+        /* Active Editing Card Pulse Ring */
+        .editing-active-ring {
+            outline: 3px solid #f59e0b !important;
+            outline-offset: 2px !important;
+            box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.35) !important;
+        }
+
+        /* Scanning Laser Animation */
+        @keyframes scanLaser {
+            0% { top: 0%; opacity: 0.9; }
+            50% { top: 96%; opacity: 1; }
+            100% { top: 0%; opacity: 0.9; }
+        }
+        .laser-line {
+            position: absolute;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, transparent, #38bdf8, #2563eb, #38bdf8, transparent);
+            box-shadow: 0 0 15px 3px rgba(56, 189, 248, 0.8);
+            animation: scanLaser 1.2s ease-in-out infinite;
+            z-index: 30;
+            pointer-events: none;
+        }
+
+        /* A4 Paper Screen Simulation & Exact Print Sizing */
+        :root {
+            --a4-scale: 0.72;
+        }
+
+        .a4-viewport-wrapper {
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            padding: 1.5rem;
+            overflow: auto;
+            background: repeating-linear-gradient(
+                45deg,
+                #e2e8f0,
+                #e2e8f0 10px,
+                #cbd5e1 10px,
+                #cbd5e1 20px
+            );
+            border-radius: 0.75rem;
+            min-height: 680px;
+        }
+
+        .a4-scale-container {
+            width: calc(210mm * var(--a4-scale));
+            height: calc(297mm * var(--a4-scale));
+            position: relative;
+            transition: width 0.2s ease, height 0.2s ease;
+        }
+
+        /* Actual 210mm x 297mm Sheet */
+        #a4-sheet {
+            width: 210mm;
+            height: 297mm;
+            background: #ffffff;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+            transform: scale(var(--a4-scale));
+            transform-origin: top right;
+            position: relative;
+            box-sizing: border-box;
+            overflow: hidden;
+        }
+
+        /* Millimeter Grid Overlay (Screen Only) */
+        #a4-sheet.show-mm-grid {
+            background-image: 
+                linear-gradient(to right, rgba(59, 130, 246, 0.08) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(59, 130, 246, 0.08) 1px, transparent 1px);
+            background-size: 10mm 10mm;
+        }
+
+        /* Individual Card Item on A4 */
+        .print-card-slot {
+            position: relative;
+            box-sizing: border-box;
+            background-color: #ffffff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            transition: box-shadow 0.15s ease;
+        }
+
+        .print-card-slot img {
+            width: 100%;
+            height: 100%;
+            object-fit: fill;
+            display: block;
+            user-select: none;
+            -webkit-user-drag: none;
+        }
+
+        /* Cut Guide Lines */
+        .cut-guides-dashed .print-card-slot {
+            outline: 0.35mm dashed #64748b;
+            outline-offset: 0.4mm;
+        }
+
+        .card-border-solid .print-card-slot {
+            border: 0.25mm solid #94a3b8;
+        }
+
+        /* Hover Controls on A4 Card (Hidden in Print) */
+        .print-card-slot .card-actions-overlay {
+            opacity: 0;
+            transition: opacity 0.15s ease;
+        }
+        .print-card-slot:hover .card-actions-overlay {
+            opacity: 1;
+        }
+
+        /* STRICT PRINT MEDIA RULES - 100% Exact Physical Millimeters */
+        @media print {
+            @page {
+                size: A4 portrait;
+                margin: 0mm !important;
+            }
+
+            html, body {
+                width: 210mm !important;
+                height: 297mm !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                background: #ffffff !important;
+                overflow: hidden !important;
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+            }
+
+            /* Hide everything except the A4 Sheet */
+            .no-print {
+                display: none !important;
+            }
+
+            .a4-viewport-wrapper,
+            .a4-scale-container,
+            main,
+            #app-layout {
+                padding: 0 !important;
+                margin: 0 !important;
+                width: 210mm !important;
+                height: 297mm !important;
+                background: transparent !important;
+                display: block !important;
+                overflow: visible !important;
+            }
+
+            #a4-sheet {
+                width: 210mm !important;
+                height: 297mm !important;
+                transform: none !important;
+                box-shadow: none !important;
+                margin: 0 !important;
+                border: none !important;
+                background-image: none !important;
+                page-break-after: avoid;
+                page-break-inside: avoid;
+            }
+
+            .card-actions-overlay,
+            .screen-only-badge {
+                display: none !important;
+            }
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+    <!-- Top Navigation Header (Hidden on Print) -->
+    <header class="no-print bg-slate-900 text-white border-b border-slate-800 sticky top-0 z-40 shadow-md">
+        <div class="max-w-[1600px] mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+            <!-- Brand Title -->
+            <div class="flex items-center gap-3">
+                <div class="w-11 h-11 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
+                    <i class="fa-solid fa-wand-magic-sparkles text-xl text-white"></i>
+                </div>
+                <div>
+                    <div class="flex items-center gap-2">
+                        <h1 class="text-lg md:text-xl font-bold tracking-tight">نظام المطابع الذكي لقص وترتيب المستمسكات</h1>
+                        <span class="bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 text-xs px-2.5 py-0.5 rounded-full font-semibold flex items-center gap-1">
+                            <i class="fa-solid fa-bolt text-amber-400"></i>
+                            قص ذكي تلقائي + تعديل حي
+                        </span>
+                    </div>
+                    <p class="text-xs text-slate-400">اكتشاف وقص البطاقات تلقائياً فور الرفع مع إمكانية التعديل اليدوي السهل وتعديل الصور المائلة</p>
+                </div>
+            </div>
+
+            <!-- Demo Presets & Privacy Badge -->
+            <div class="flex flex-wrap items-center gap-2">
+                <div class="hidden xl:flex items-center gap-1.5 bg-emerald-950/80 border border-emerald-700/60 text-emerald-300 px-3 py-1.5 rounded-xl text-xs font-medium">
+                    <i class="fa-solid fa-shield-halved text-emerald-400"></i>
+                    <span>معالجة محلية آمنة 100% داخل المتصفح</span>
+                </div>
+
+                <!-- 3 Smart Demo Scenarios -->
+                <div class="flex items-center bg-slate-800 p-1 rounded-xl border border-slate-700 gap-1">
+                    <span class="text-[11px] text-slate-400 px-2 font-semibold hidden sm:inline">نماذج اختبار الذكاء:</span>
+                    <button onclick="loadDemoScenario('dual_scanner')" class="bg-blue-600/90 hover:bg-blue-500 text-white px-2.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5" title="اختبار اكتشاف الوجه والظهر معاً في صورة واحدة">
+                        <i class="fa-solid fa-clone text-amber-300"></i>
+                        <span>وجه وظهر (سكانر)</span>
+                    </button>
+                    <button onclick="loadDemoScenario('single_card')" class="bg-slate-700 hover:bg-slate-600 text-slate-200 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5" title="اختبار اكتشاف بطاقة واحدة">
+                        <i class="fa-regular fa-id-card text-sky-400"></i>
+                        <span>بطاقة مفردة</span>
+                    </button>
+                    <button onclick="loadDemoScenario('skewed_mobile')" class="bg-slate-700 hover:bg-slate-600 text-slate-200 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5" title="اختبار صورة موبايل مائلة وتعديل الزوايا الأربع">
+                        <i class="fa-solid fa-mobile-screen-button text-emerald-400"></i>
+                        <span>صورة موبايل مائلة</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Workspace Layout -->
+    <main id="app-layout" class="flex-1 max-w-[1600px] w-full mx-auto p-3 md:p-5 grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+
+        <!-- RIGHT PANEL (In RTL): Smart Detection, Manual Fine-Tuning, Filters & Staging (7 Columns on Large) -->
+        <section class="no-print lg:col-span-7 flex flex-col gap-5">
+
+            <!-- SMART AUTO-DETECT CONTROL BAR -->
+            <div class="bg-gradient-to-l from-slate-900 via-blue-950 to-slate-900 text-white rounded-2xl p-4 shadow-md border border-blue-800/60 flex flex-wrap items-center justify-between gap-4">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-xl bg-blue-500/20 border border-blue-400/40 flex items-center justify-center text-blue-300 shrink-0">
+                        <i class="fa-solid fa-microchip text-lg"></i>
+                    </div>
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <h2 class="font-bold text-sm md:text-base">القص والالتقاط الذكي المباشر فور رفع الصورة</h2>
+                            <span id="smart-status-pill" class="bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 text-[11px] px-2 py-0.5 rounded-full font-bold">جاهز للفحص الذكي</span>
+                        </div>
+                        <p class="text-xs text-slate-300 mt-0.5">يتعرف تلقائياً على حواف البطاقة (أو الوجه والظهر معاً) ويقصها فوراً إلى ورقة A4، مع إمكانية التعديل اليدوي بأي لحظة</p>
+                    </div>
+                </div>
+
+                <!-- Toggles for Auto-Crop & Auto-Send to A4 -->
+                <div class="flex flex-wrap items-center gap-3 bg-slate-900/90 px-3.5 py-2 rounded-xl border border-slate-700">
+                    <label class="inline-flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-200 select-none">
+                        <input id="toggle-auto-capture" type="checkbox" checked class="rounded text-blue-500 focus:ring-blue-500 w-4 h-4 accent-emerald-500">
+                        <span>التقاط وإضافة تلقائية فور الرفع</span>
+                    </label>
+                    <span class="text-slate-600">|</span>
+                    <button type="button" onclick="runSmartDetectionOnCurrentImage(true)" class="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 shadow-sm" title="إعادة فحص الصورة ذكياً واكتشاف البطاقات">
+                        <i class="fa-solid fa-wand-magic-sparkles"></i>
+                        <span>إعادة الفحص الذكي الآن</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Card 1: Upload, Smart Editor & Manual Fine-Tuning (Dual Mode: Rect Cropper + 4-Point Perspective) -->
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                
+                <!-- Active Manual Edit Banner (Shown when user is editing a captured card) -->
+                <div id="live-edit-banner" class="hidden bg-amber-500 text-slate-950 px-5 py-2.5 flex flex-wrap items-center justify-between gap-2 font-bold text-xs">
+                    <div class="flex items-center gap-2">
+                        <i class="fa-solid fa-pen-ruler text-base"></i>
+                        <span id="live-edit-title">وضع التعديل اليدوي الحي: حرك الإطار أو الزوايا لتصحيح القص وسيتم التحديث تلقائياً</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button type="button" onclick="applyManualEditAndFinish()" class="bg-slate-900 hover:bg-slate-800 text-white px-3.5 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1.5 shadow">
+                            <i class="fa-solid fa-check text-emerald-400"></i>
+                            <span>حفظ التعديل وتحديث البطاقة</span>
+                        </button>
+                        <button type="button" onclick="cancelManualEditMode()" class="bg-amber-600/40 hover:bg-amber-600/60 text-slate-950 px-2.5 py-1 rounded-lg text-xs font-bold transition">
+                            إلغاء
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Section Header -->
+                <div class="bg-slate-50 px-5 py-3.5 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3">
+                    <div class="flex items-center gap-2.5">
+                        <span class="w-7 h-7 rounded-lg bg-blue-600 text-white font-bold text-sm flex items-center justify-center">1</span>
+                        <div>
+                            <h2 class="font-bold text-slate-800 text-base">رفع المستمسك والتعديل اليدوي السهل (عند الحاجة)</h2>
+                            <p id="detection-summary-text" class="text-[11px] text-blue-600 font-semibold">ارفع الصورة ليقوم النظام بقصها تلقائياً، أو عدّل الحواف والزوايا يدوياً بكل سهولة</p>
+                        </div>
+                    </div>
+
+                    <div class="flex flex-wrap items-center gap-2">
+                        <!-- Mode Switcher: Standard Frame vs 4-Point Perspective -->
+                        <div class="flex items-center bg-slate-200/90 p-1 rounded-xl border border-slate-300">
+                            <button type="button" id="btn-mode-rect" onclick="switchEditorMode('rect')" class="bg-white text-blue-700 shadow-sm px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5">
+                                <i class="fa-solid fa-crop-simple"></i>
+                                <span>إطار القص القياسي</span>
+                            </button>
+                            <button type="button" id="btn-mode-perspective" onclick="switchEditorMode('perspective')" class="text-slate-700 hover:text-slate-900 px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5" title="تحديد الزوايا الأربع لتعديل البطاقات المصورة بالموبايل بشكل مائل">
+                                <i class="fa-solid fa-vector-square"></i>
+                                <span>الزوايا الأربع (للموبايل المائل)</span>
+                            </button>
+                        </div>
+
+                        <label for="file-upload" class="cursor-pointer bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 shadow-sm">
+                            <i class="fa-solid fa-upload"></i>
+                            <span>رفع صورة مستمسك</span>
+                        </label>
+                        <input id="file-upload" type="file" accept="image/*" class="hidden" onchange="handleImageUpload(event)">
+                    </div>
+                </div>
+
+                <!-- Aspect Ratio & Quick Tools Bar -->
+                <div class="px-4 py-2.5 bg-slate-100/80 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3">
+                    <!-- Aspect Ratio Selector -->
+                    <div class="flex flex-wrap items-center gap-1.5">
+                        <span class="text-xs font-bold text-slate-600 ml-1"><i class="fa-solid fa-ruler-combined ml-1 text-blue-600"></i>قياس البطاقة:</span>
+                        <button type="button" onclick="setCardPreset('cr80_h', 85.6, 54)" id="preset-cr80_h" class="preset-btn bg-blue-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition shadow-sm">
+                            هوية قياسية CR80 (85.6×54 مم)
+                        </button>
+                        <button type="button" onclick="setCardPreset('cr80_v', 54, 85.6)" id="preset-cr80_v" class="preset-btn bg-white hover:bg-slate-200 text-slate-700 border border-slate-300 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition">
+                            عمودي (54×85.6 مم)
+                        </button>
+                        <button type="button" onclick="setCardPreset('id_large', 95, 65)" id="preset-id_large" class="preset-btn bg-white hover:bg-slate-200 text-slate-700 border border-slate-300 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition">
+                            مستمسك وسط (95×65 مم)
+                        </button>
+                        <button type="button" onclick="setCardPreset('free', 85.6, 54)" id="preset-free" class="preset-btn bg-white hover:bg-slate-200 text-slate-700 border border-slate-300 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition">
+                            قص حر
+                        </button>
+                    </div>
+
+                    <!-- Detected Regions Switcher (Shown when 2 cards are found in 1 scan) + Rotation Controls -->
+                    <div class="flex items-center gap-1.5">
+                        <div id="detected-boxes-pills" class="hidden items-center gap-1 bg-blue-100 border border-blue-300 px-2 py-1 rounded-lg">
+                            <span class="text-[11px] font-bold text-blue-900">البطاقات المكتشفة:</span>
+                            <button type="button" onclick="focusDetectedCard(0)" class="bg-blue-600 text-white px-2 py-0.5 rounded text-[11px] font-bold hover:bg-blue-700 transition">بطاقة 1 (الوجه)</button>
+                            <button type="button" onclick="focusDetectedCard(1)" class="bg-indigo-600 text-white px-2 py-0.5 rounded text-[11px] font-bold hover:bg-indigo-700 transition">بطاقة 2 (الظهر)</button>
+                        </div>
+
+                        <div id="rect-mode-tools" class="flex items-center gap-1">
+                            <button type="button" onclick="rotateCropper(-90)" title="تدوير لليسار 90 درجة" class="p-2 bg-white hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-lg text-xs transition">
+                                <i class="fa-solid fa-rotate-left"></i>
+                            </button>
+                            <button type="button" onclick="rotateCropper(90)" title="تدوير لليمين 90 درجة" class="p-2 bg-white hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-lg text-xs transition">
+                                <i class="fa-solid fa-rotate-right"></i>
+                            </button>
+                            <button type="button" onclick="flipCropper('h')" title="قلب أفقي" class="p-2 bg-white hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-lg text-xs transition">
+                                <i class="fa-solid fa-arrows-left-right"></i>
+                            </button>
+                            <button type="button" onclick="resetCropper()" title="إعادة ضبط القص الذكي" class="px-2.5 py-1.5 bg-white hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-lg text-xs font-semibold transition">
+                                إعادة ضبط
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Cropper & 4-Point Perspective Canvas Area -->
+                <div id="cropper-dropzone" class="cropper-wrapper filter-preview-active flex items-center justify-center select-none">
+                    
+                    <!-- Laser Scanning Visual Overlay -->
+                    <div id="scanner-laser-overlay" class="hidden absolute inset-0 bg-slate-900/40 z-30 flex flex-col items-center justify-center">
+                        <div class="laser-line"></div>
+                        <div class="bg-slate-900/90 text-white px-4 py-2 rounded-xl border border-sky-400/50 shadow-xl flex items-center gap-2.5 text-xs font-bold">
+                            <i class="fa-solid fa-Radar fa-spin text-sky-400"></i>
+                            <span>جاري التعرف الذكي على حواف البطاقة...</span>
+                        </div>
+                    </div>
+
+                    <!-- Empty State Prompt -->
+                    <div id="empty-cropper-state" class="text-center p-6 max-w-md mx-auto">
+                        <div class="w-16 h-16 rounded-2xl bg-slate-800 border border-slate-700 flex items-center justify-center mx-auto mb-4 text-blue-400">
+                            <i class="fa-solid fa-id-card-clip text-3xl"></i>
+                        </div>
+                        <h3 class="text-white font-bold text-base mb-1">ارفع أو اسحب صورة المستمسك هنا (أو Ctrl+V)</h3>
+                        <p class="text-slate-400 text-xs mb-4 leading-relaxed">
+                            سيقوم النظام <strong class="text-emerald-400">بتحديد البطاقة وقصها تلقائياً</strong> فور الرفع، وإذا كان هناك أي خطأ بسيط يمكنك تحريك الإطار أو تعديل الزوايا الأربع يدوياً بكل سهولة!
+                        </p>
+                        <div class="flex flex-wrap items-center justify-center gap-2">
+                            <button onclick="document.getElementById('file-upload').click()" class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2.5 rounded-xl text-xs font-bold transition shadow-lg shadow-blue-600/30 flex items-center gap-2">
+                                <i class="fa-solid fa-folder-open"></i>
+                                <span>اختيار صورة من الجهاز</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Mode 1: Image Target for Cropper.js -->
+                    <img id="cropper-image" src="" alt="صورة المستمسك للقص" class="hidden max-w-full max-h-full">
+
+                    <!-- Mode 2: Interactive 4-Point Perspective Canvas + Magnifying Loupe -->
+                    <div id="perspective-editor-container" class="hidden w-full h-full relative flex items-center justify-center p-3">
+                        <canvas id="perspective-canvas"></canvas>
+                        
+                        <!-- Precision Loupe Magnifier (Appears while dragging a corner) -->
+                        <div id="perspective-loupe" class="hidden absolute top-3 left-3 w-32 h-32 rounded-full border-4 border-amber-400 shadow-2xl overflow-hidden bg-slate-950 pointer-events-none z-30">
+                            <canvas id="loupe-canvas" width="128" height="128" class="w-full h-full"></canvas>
+                            <!-- Crosshair inside Loupe -->
+                            <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
+                                <div class="w-full h-[1px] bg-amber-400/80"></div>
+                                <div class="h-full w-[1px] bg-amber-400/80 absolute"></div>
+                                <div class="w-2.5 h-2.5 rounded-full border border-amber-400"></div>
+                            </div>
+                            <span id="loupe-corner-label" class="absolute bottom-1 inset-x-0 text-center text-[9px] font-bold bg-slate-900/80 text-amber-300 py-0.5">الزاوية</span>
+                        </div>
+
+                        <!-- Helper instruction badge -->
+                        <div class="absolute bottom-2.5 right-3 bg-slate-900/85 text-slate-200 border border-slate-700 px-3 py-1.5 rounded-xl text-[11px] font-semibold flex items-center gap-2 pointer-events-none">
+                            <i class="fa-solid fa-hand-pointer text-amber-400"></i>
+                            <span>اسحب الدوائر الأربع لوضعها على زوايا البطاقة المائلة ليتم تعديلها تلقائياً</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Fine Rotation & Live Update Bar -->
+                <div class="px-5 py-2.5 bg-slate-900 text-slate-300 border-t border-slate-800 flex flex-wrap items-center justify-between gap-4 text-xs">
+                    <div id="fine-rotate-container" class="flex items-center gap-3 flex-1 min-w-[240px]">
+                        <span class="font-semibold text-slate-400 whitespace-nowrap"><i class="fa-solid fa-compass-drafting ml-1 text-blue-400"></i>تعديل الميلان الدقيق:</span>
+                        <input id="fine-rotate-slider" type="range" min="-45" max="45" step="0.5" value="0" oninput="handleFineRotation(this.value)" class="w-full accent-blue-500 cursor-pointer h-1.5 bg-slate-700 rounded-lg">
+                        <span id="fine-rotate-val" class="font-mono text-blue-400 font-bold w-12 text-left">0.0°</span>
+                        <button onclick="handleFineRotation(0); document.getElementById('fine-rotate-slider').value=0;" class="text-slate-400 hover:text-white underline text-[11px]">تصفير</button>
+                    </div>
+
+                    <div class="flex items-center gap-2">
+                        <button type="button" onclick="applyManualEditAndFinish()" class="bg-emerald-600 hover:bg-emerald-500 text-white px-3.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 shadow-sm">
+                            <i class="fa-solid fa-arrows-rotate"></i>
+                            <span>تحديث البطاقة بالقص الحالي</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Card 2: Image Enhancement & Print Quality Optimization -->
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5">
+                <div class="flex flex-wrap items-center justify-between gap-2 pb-3 mb-4 border-b border-slate-200">
+                    <div class="flex items-center gap-2.5">
+                        <span class="w-7 h-7 rounded-lg bg-indigo-600 text-white font-bold text-sm flex items-center justify-center">2</span>
+                        <div>
+                            <h2 class="font-bold text-slate-800 text-base">تحسين جودة الصورة وتصفية الخلفية للطباعة</h2>
+                            <p class="text-[11px] text-slate-500">تفتيح المستمسكات المظلمة وإزالة الخلفية الرمادية لتوفير الحبر وإخراج نصوص واضحة</p>
+                        </div>
+                    </div>
+
+                    <button onclick="resetFilters()" class="text-xs text-slate-600 hover:text-red-600 bg-slate-100 hover:bg-red-50 px-3 py-1.5 rounded-lg font-semibold transition flex items-center gap-1.5">
+                        <i class="fa-solid fa-rotate-left"></i>
+                        <span>إرجاع الإعدادات الأصلية</span>
+                    </button>
+                </div>
+
+                <!-- Color Mode Selector Buttons -->
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5 mb-4">
+                    <button type="button" onclick="setColorMode('color')" id="mode-color" class="mode-btn border-2 border-blue-600 bg-blue-50/70 text-blue-900 p-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition">
+                        <i class="fa-solid fa-palette text-blue-600 text-sm"></i>
+                        <span>ألوان طبيعية (ملون)</span>
+                    </button>
+                    <button type="button" onclick="setColorMode('grayscale')" id="mode-grayscale" class="mode-btn border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 p-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition">
+                        <i class="fa-solid fa-droplet-slash text-slate-600 text-sm"></i>
+                        <span>تدرج رمادي (توفير الحبر)</span>
+                    </button>
+                    <button type="button" onclick="setColorMode(' photocopy')" id="mode-photocopy" class="mode-btn border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 p-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition">
+                        <i class="fa-solid fa-file-Lines text-indigo-600 text-sm"></i>
+                        <span>تبييض الخلفية (نسخة استنساخ)</span>
+                    </button>
+                </div>
+
+                <!-- Sliders Grid -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-200/80">
+                    <!-- Brightness -->
+                    <div>
+                        <div class="flex justify-between text-xs font-bold text-slate-700 mb-1">
+                            <span><i class="fa-solid fa-sun text-amber-500 ml-1"></i>السطوع (تفتيح المستمسك)</span>
+                            <span id="val-brightness" class="font-mono text-blue-600">100%</span>
+                        </div>
+                        <input id="filter-brightness" type="range" min="60" max="160" value="100" oninput="updateFilterSettings()" class="w-full accent-blue-600 cursor-pointer h-2 bg-slate-200 rounded-lg">
+                    </div>
+
+                    <!-- Contrast -->
+                    <div>
+                        <div class="flex justify-between text-xs font-bold text-slate-700 mb-1">
+                            <span><i class="fa-solid fa-circle-half-stroke text-indigo-600 ml-1"></i>التباين (إبراز الخطوط)</span>
+                            <span id="val-contrast" class="font-mono text-blue-600">105%</span>
+                        </div>
+                        <input id="filter-contrast" type="range" min="60" max="180" value="105" oninput="updateFilterSettings()" class="w-full accent-blue-600 cursor-pointer h-2 bg-slate-200 rounded-lg">
+                    </div>
+
+                    <!-- Background Whitening / Clean -->
+                    <div>
+                        <div class="flex justify-between text-xs font-bold text-slate-700 mb-1">
+                            <span><i class="fa-solid fa-eraser text-emerald-600 ml-1"></i>تصفية الخلفية الرمادية</span>
+                            <span id="val-whiten" class="font-mono text-blue-600">0%</span>
+                        </div>
+                        <input id="filter-whiten" type="range" min="0" max="100" value="0" oninput="updateFilterSettings()" class="w-full accent-blue-600 cursor-pointer h-2 bg-slate-200 rounded-lg">
+                    </div>
+
+                    <!-- Text Sharpness -->
+                    <div>
+                        <div class="flex justify-between text-xs font-bold text-slate-700 mb-1">
+                            <span><i class="fa-solid fa-wand-sparkles text-purple-600 ml-1"></i>حدة النصوص والتفاصيل</span>
+                            <span id="val-sharpness" class="font-mono text-blue-600">20%</span>
+                        </div>
+                        <input id="filter-sharpness" type="range" min="0" max="100" value="20" oninput="updateFilterSettings()" class="w-full accent-blue-600 cursor-pointer h-2 bg-slate-200 rounded-lg">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Card 3: Staging Area (تجهيز الوجه والظهر والتعديل اليدوي السريع) -->
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5">
+                <div class="flex flex-wrap items-center justify-between gap-2 pb-3 mb-4 border-b border-slate-200">
+                    <div class="flex items-center gap-2.5">
+                        <span class="w-7 h-7 rounded-lg bg-emerald-600 text-white font-bold text-sm flex items-center justify-center">3</span>
+                        <div>
+                            <h2 class="font-bold text-slate-800 text-base">البطاقات الملتقطة (الوجه والظهر) مع إمكانية التعديل بضغطة زر</h2>
+                            <p class="text-[11px] text-slate-500">يتم ملء الوجه والظهر تلقائياً عند القص الذكي، وإذا لاحظت أي خطأ اضغط <strong>"تعديل القص يدوياً"</strong> لتصحيحه فوراً</p>
+                        </div>
+                    </div>
+
+                    <!-- Quick Direct Add Button -->
+                    <button type="button" onclick="addCurrentCropDirectlyToA4()" class="bg-slate-800 hover:bg-slate-900 text-white px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 shadow-sm">
+                        <i class="fa-solid fa-plus text-emerald-400"></i>
+                        <span>إضافة القص الحالي مباشرة لورقة A4</span>
+                    </button>
+                </div>
+
+                <!-- Staging Slots: Front (Right) & Back (Left) -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                    <!-- Front Slot (الوجه) -->
+                    <div id="staging-card-box-front" class="border-2 border-dashed border-blue-300 bg-blue-50/40 rounded-xl p-3.5 flex flex-col justify-between transition">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-xs font-bold text-blue-900 flex items-center gap-1.5">
+                                <span class="w-2.5 h-2.5 rounded-full bg-blue-600"></span>
+                                وجه البطاقة (الأمام)
+                            </span>
+                            <div class="flex items-center gap-2">
+                                <button onclick="editStagingSlotCrop('front')" id="edit-front-btn" class="hidden text-[11px] bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 px-2 py-0.5 rounded-md font-bold transition flex items-center gap-1">
+                                    <i class="fa-solid fa-pen-to-square"></i>
+                                    <span>تعديل القص يدوياً</span>
+                                </button>
+                                <button onclick="clearStagingSlot('front')" id="clear-front-btn" class="hidden text-[11px] text-red-600 hover:underline font-semibold">حذف</button>
+                            </div>
+                        </div>
+
+                        <div id="staging-front-preview" onclick="if(stagingCards.front) editStagingSlotCrop('front')" class="aspect-[85.6/54] w-full bg-white rounded-lg border border-slate-200 flex flex-col items-center justify-center overflow-hidden mb-3 shadow-inner cursor-pointer relative group">
+                            <i class="fa-regular fa-id-badge text-2xl text-slate-300 mb-1"></i>
+                            <span class="text-[11px] text-slate-400">يتم التقاط الوجه تلقائياً أو يدوياً</span>
+                        </div>
+
+                        <button type="button" onclick="captureToStaging('front', true)" class="w-full bg-blue-600 hover:bg-blue-700 text-white py-2.5 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 shadow-sm">
+                            <i class="fa-solid fa-crop-simple"></i>
+                            <span>التقاط / تحديث القص الحالي كـ (وجه)</span>
+                        </button>
+                    </div>
+
+                    <!-- Back Slot (الظهر) -->
+                    <div id="staging-card-box-back" class="border-2 border-dashed border-indigo-300 bg-indigo-50/40 rounded-xl p-3.5 flex flex-col justify-between transition">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-xs font-bold text-indigo-900 flex items-center gap-1.5">
+                                <span class="w-2.5 h-2.5 rounded-full bg-indigo-600"></span>
+                                ظهر البطاقة (الخلف)
+                            </span>
+                            <div class="flex items-center gap-2">
+                                <button onclick="editStagingSlotCrop('back')" id="edit-back-btn" class="hidden text-[11px] bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 px-2 py-0.5 rounded-md font-bold transition flex items-center gap-1">
+                                    <i class="fa-solid fa-pen-to-square"></i>
+                                    <span>تعديل القص يدوياً</span>
+                                </button>
+                                <button onclick="clearStagingSlot('back')" id="clear-back-btn" class="hidden text-[11px] text-red-600 hover:underline font-semibold">حذف</button>
+                            </div>
+                        </div>
+
+                        <div id="staging-back-preview" onclick="if(stagingCards.back) editStagingSlotCrop('back')" class="aspect-[85.6/54] w-full bg-white rounded-lg border border-slate-200 flex flex-col items-center justify-center overflow-hidden mb-3 shadow-inner cursor-pointer relative group">
+                            <i class="fa-solid fa-barcode text-2xl text-slate-300 mb-1"></i>
+                            <span class="text-[11px] text-slate-400">يتم التقاط الظهر تلقائياً أو يدوياً</span>
+                        </div>
+
+                        <button type="button" onclick="captureToStaging('back', true)" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 shadow-sm">
+                            <i class="fa-solid fa-crop-simple"></i>
+                            <span>التقاط / تحديث القص الحالي كـ (ظهر)</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Copies Count & Send to A4 Action Bar -->
+                <div class="bg-emerald-50/90 border border-emerald-200 rounded-xl p-3.5 flex flex-wrap items-center justify-between gap-4">
+                    <div class="flex flex-wrap items-center gap-3">
+                        <label for="copies-count" class="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                            <i class="fa-solid fa-copy text-emerald-600"></i>
+                            <span>عدد النسخ المطلوبة على الورقة:</span>
+                        </label>
+                        <div class="flex items-center bg-white border border-slate-300 rounded-lg overflow-hidden">
+                            <button type="button" onclick="adjustCopies(-1)" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition">-</button>
+                            <input id="copies-count" type="number" min="1" max="10" value="1" class="w-12 text-center font-bold text-sm text-slate-800 focus:outline-none">
+                            <button type="button" onclick="adjustCopies(1)" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition">+</button>
+                        </div>
+                        <!-- Quick Copy Presets -->
+                        <div class="flex items-center gap-1">
+                            <button type="button" onclick="document.getElementById('copies-count').value=1" class="px-2 py-1 text-[11px] bg-white border border-slate-200 hover:bg-emerald-100 rounded font-semibold">1</button>
+                            <button type="button" onclick="document.getElementById('copies-count').value=2" class="px-2 py-1 text-[11px] bg-white border border-slate-200 hover:bg-emerald-100 rounded font-semibold">2</button>
+                            <button type="button" onclick="document.getElementById('copies-count').value=4" class="px-2 py-1 text-[11px] bg-white border border-slate-200 hover:bg-emerald-100 rounded font-semibold">4</button>
+                            <button type="button" onclick="document.getElementById('copies-count').value=5" class="px-2.5 py-1 text-[11px] bg-white border border-slate-200 hover:bg-emerald-100 rounded font-semibold">5 (ملء الصفحة)</button>
+                        </div>
+                    </div>
+
+                    <button type="button" onclick="commitStagingToA4()" class="flex-1 sm:flex-initial bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-xl text-sm font-bold transition shadow-md shadow-emerald-600/20 flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-file-import"></i>
+                        <span>إضافة إلى ورقة الطباعة A4</span>
+                    </button>
+                </div>
+            </div>
+
+        </section>
+
+        <!-- LEFT PANEL (In RTL): Step 4 - Live A4 Sheet Preview, Layout Controls & Print/PDF (5 Columns on Large) -->
+        <section class="lg:col-span-5 flex flex-col gap-4 lg:sticky lg:top-20">
+
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                <!-- A4 Top Action Bar (Hidden in Print) -->
+                <div class="no-print bg-slate-900 text-white p-4 flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <h2 class="font-bold text-base">معاينة ورقة الطباعة (A4)</h2>
+                            <span id="a4-counter-badge" class="bg-blue-600 text-white text-xs px-2.5 py-0.5 rounded-full font-bold">0 بطاقات</span>
+                        </div>
+                        <p class="text-[11px] text-slate-400">الأبعاد الحقيقية: 210×297 مم | قياس كل هوية: <span id="active-size-label" class="text-blue-300 font-mono">85.6×54 مم</span></p>
+                    </div>
+
+                    <!-- Primary Print & PDF Buttons -->
+                    <div class="flex items-center gap-2">
+                        <button type="button" onclick="triggerDirectPrint()" class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2.5 rounded-xl text-xs font-bold transition shadow-lg shadow-blue-600/30 flex items-center gap-2">
+                            <i class="fa-solid fa-print text-sm"></i>
+                            <span>طباعة مباشرة</span>
+                        </button>
+                        <button type="button" id="btn-export-pdf" onclick="exportHighResPDF()" class="bg-rose-600 hover:bg-rose-500 text-white px-4 py-2.5 rounded-xl text-xs font-bold transition shadow-lg shadow-rose-600/30 flex items-center gap-2">
+                            <i class="fa-solid fa-file-pdf text-sm"></i>
+                            <span>تصدير PDF (300 DPI)</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Layout & Margin Fine Controls (Hidden in Print) -->
+                <div class="no-print bg-slate-50 px-4 py-3 border-b border-slate-200 space-y-3">
+                    <!-- Row 1: Sliders for Gap & Top Offset (Half-paper reuse feature!) -->
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div class="bg-white p-2.5 rounded-xl border border-slate-200">
+                            <div class="flex justify-between text-xs font-bold text-slate-700 mb-1">
+                                <span><i class="fa-solid fa-arrows-left-right-to-line text-blue-600 ml-1"></i>المسافة بين البطاقات:</span>
+                                <span id="val-gap-mm" class="font-mono text-blue-600">4 مم</span>
+                            </div>
+                            <input id="layout-gap-mm" type="range" min="0" max="12" step="1" value="4" oninput="updateA4LayoutStyles()" class="w-full accent-blue-600 cursor-pointer h-1.5 bg-slate-200 rounded-lg">
+                        </div>
+
+                        <div class="bg-white p-2.5 rounded-xl border border-slate-200" title="مفيد جداً عند وضع ورقة مطبوع في أعلاها مسبقاً للطباعة في النصف السفلي الفارغ">
+                            <div class="flex justify-between text-xs font-bold text-slate-700 mb-1">
+                                <span><i class="fa-solid fa-arrow-down-short-wide text-indigo-600 ml-1"></i>الهامش العلوي (إزاحة للأسفل):</span>
+                                <span id="val-top-mm" class="font-mono text-indigo-600">12 مم</span>
+                            </div>
+                            <input id="layout-top-mm" type="range" min="5" max="160" step="1" value="12" oninput="updateA4LayoutStyles()" class="w-full accent-indigo-600 cursor-pointer h-1.5 bg-slate-200 rounded-lg">
+                        </div>
+                    </div>
+
+                    <!-- Row 2: Toggles & Clear Button -->
+                    <div class="flex flex-wrap items-center justify-between gap-2 pt-1">
+                        <div class="flex flex-wrap items-center gap-3">
+                            <label class="inline-flex items-center gap-1.5 cursor-pointer text-xs font-semibold text-slate-700">
+                                <input id="toggle-cut-lines" type="checkbox" checked onchange="updateA4LayoutStyles()" class="rounded text-blue-600 focus:ring-blue-500 w-4 h-4">
+                                <span>خطوط القص المتقطعة</span>
+                            </label>
+
+                            <label class="inline-flex items-center gap-1.5 cursor-pointer text-xs font-semibold text-slate-700">
+                                <input id="toggle-card-border" type="checkbox" checked onchange="updateA4LayoutStyles()" class="rounded text-blue-600 focus:ring-blue-500 w-4 h-4">
+                                <span>إطار البطاقة</span>
+                            </label>
+
+                            <label class="inline-flex items-center gap-1.5 cursor-pointer text-xs font-semibold text-slate-700">
+                                <input id="toggle-mm-grid" type="checkbox" checked onchange="updateA4LayoutStyles()" class="rounded text-blue-600 focus:ring-blue-500 w-4 h-4">
+                                <span>شبكة المليمتر (للمعاينة)</span>
+                            </label>
+                        </div>
+
+                        <div class="flex items-center gap-2">
+                            <button type="button" onclick="clearAllA4Cards()" class="text-xs text-red-600 hover:bg-red-50 border border-red-200 px-2.5 py-1 rounded-lg font-bold transition flex items-center gap-1">
+                                <i class="fa-solid fa-trash-can"></i>
+                                <span>إفراغ الورقة</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Visual A4 Viewport Container -->
+                <div id="a4-viewport" class="a4-viewport-wrapper">
+                    <div class="a4-scale-container">
+                        <!-- THE ACTUAL A4 SHEET (210mm x 297mm) -->
+                        <div id="a4-sheet" class="show-mm-grid cut-guides-dashed card-border-solid">
+                            
+                            <!-- Non-printable Top Ruler Indicator -->
+                            <div class="screen-only-badge absolute top-1.5 left-3 right-3 flex justify-between items-center text-[9px] font-mono text-slate-400 pointer-events-none select-none">
+                                <span>A4 PORTRAIT (210mm × 297mm)</span>
+                                <span>الوجه (يمين) ◄ ► الظهر (يسار)</span>
+                            </div>
+
+                            <!-- Cards Grid Container Inside A4 -->
+                            <div id="a4-cards-grid" style="padding-top: 12mm; padding-right: 14mm; padding-left: 14mm; gap: 4mm;" class="w-full flex flex-wrap justify-center items-start content-start box-border">
+                                <!-- Dynamic Cards Inserted Here -->
+                            </div>
+
+                            <!-- Empty State Inside A4 Sheet (Hidden when cards exist or during print) -->
+                            <div id="a4-empty-overlay" class="screen-only-badge absolute inset-0 flex flex-col items-center justify-center p-8 text-center pointer-events-none">
+                                <div class="w-16 h-16 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-400 mb-3">
+                                    <i class="fa-regular fa-file-lines text-2xl"></i>
+                                </div>
+                                <p class="text-sm font-bold text-slate-500 mb-1">ورقة الطباعة A4 فارغة حالياً</p>
+                                <p class="text-xs text-slate-400 max-w-xs">
+                                    قم بقص المستمسك من القسم الأيمن واضغط على <strong>"إضافة إلى ورقة الطباعة A4"</strong> لترتيب البطاقات بالقياس الحقيقي (85.6×54 مم).
+                                </p>
+                            </div>
+
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Printer Tip Footer (Hidden in Print) -->
+                <div class="no-print bg-amber-50 border-t border-amber-200 px-4 py-2.5 text-[11px] text-amber-900 flex items-center gap-2">
+                    <i class="fa-solid fa-circle-info text-amber-600 text-sm"></i>
+                    <span><strong>تنبيه مهم لإعدادات الطابعة:</strong> عند الضغط على طباعة، تأكد من اختيار حجم الورق <strong>A4</strong> وضبط المقياس (Scale) على <strong>100% أو الحجم الفعلي (Actual Size)</strong> وإلغاء الهوامش.</span>
+                </div>
+            </div>
+
+        </section>
+    </main>
+
+    <!-- Toast Notification Container (No alert() used) -->
+    <div id="toast-container" class="no-print fixed bottom-5 left-5 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none"></div>
+
+    <!-- Main Application Script -->
+    <script>
+        // ==========================================
+        // 1. APPLICATION STATE
+        // ==========================================
+        let cropper = null;
+        let currentFlipX = 1;
+        let currentFlipY = 1;
+        let currentUploadedImgSrc = '';
+        let currentImageElement = null; // Offscreen Image object for CV & Perspective Warp
+        let editorMode = 'rect';        // 'rect' (Cropper.js) | 'perspective' (4-Point Homography)
+
+        // Detected cards from Smart Computer Vision engine on current image
+        // Each item: { bbox: {x,y,w,h}, corners: [{x,y}x4], isSkewed: boolean }
+        let lastDetectedCards = [];
+
+        // Active physical dimensions in millimeters (Default: CR80 85.6mm x 54mm)
+        let activeCardSpec = {
+            id: 'cr80_h',
+            widthMM: 85.6,
+            heightMM: 54.0,
+            aspectRatio: 85.6 / 54.0
+        };
+
+        // Filter Settings State
+        let filterState = {
+            mode: 'color', // 'color' | 'grayscale' | 'photocopy'
+            brightness: 100,
+            contrast: 105,
+            whiten: 0,
+            sharpness: 20
+        };
+
+        // Staging Area State (Front & Back data URLs + dimensions + crop metadata for manual re-editing)
+        let stagingCards = {
+            front: null,
+            back: null
+        };
+
+        // Array of Cards placed on the A4 Sheet
+        // Each item: { id, slotRef, dataUrl, label, widthMM, heightMM, sourceMeta }
+        let a4CardsList = [];
+
+        // Live Manual Edit Tracking: { type: 'staging' | 'a4', targetKey: 'front' | 'back' | cardId }
+        let activeManualEditTarget = null;
+
+        // 4-Point Perspective Interactive State
+        // Normalized coordinates (0..1) in image space: [TopLeft, TopRight, BottomRight, BottomLeft]
+        let perspectiveCorners = [
+            { x: 0.15, y: 0.15 },
+            { x: 0.85, y: 0.15 },
+            { x: 0.85, y: 0.85 },
+            { x: 0.15, y: 0.85 }
+        ];
+        let draggingCornerIdx = -1;
+        let perspectiveCanvasScale = 1;
+
+        // ==========================================
+        // 2. INITIALIZATION & RESPONSIVE A4 SCALING
+        // ==========================================
+        window.addEventListener('DOMContentLoaded', () => {
+            adjustA4PreviewScale();
+            window.addEventListener('resize', () => {
+                adjustA4PreviewScale();
+                if (editorMode === 'perspective' && currentImageElement) {
+                    renderPerspectiveEditorCanvas();
+                }
+            });
+            setupDragAndDropAndPaste();
+            setupPerspectiveCanvasEvents();
+            updateFilterSettings();
+
+            // Load default dual-card scanner sheet and let Smart Auto-Detect capture both Front & Back automatically!
+            loadDemoScenario('dual_scanner', true);
+        });
+
+        function adjustA4PreviewScale() {
+            const viewport = document.getElementById('a4-viewport');
+            if (!viewport) return;
+            const availableWidth = viewport.clientWidth - 36;
+            const a4PixelWidth = 794;
+            let scale = availableWidth / a4PixelWidth;
+            scale = Math.min(Math.max(scale, 0.36), 0.78);
+            document.documentElement.style.setProperty('--a4-scale', scale.toFixed(3));
+        }
+
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            
+            const colors = {
+                success: 'bg-slate-900 border-emerald-500 text-white',
+                info: 'bg-slate-900 border-blue-500 text-white',
+                warning: 'bg-amber-950 border-amber-500 text-amber-100',
+                error: 'bg-rose-950 border-rose-500 text-rose-100'
+            };
+            const icons = {
+                success: 'fa-circle-check text-emerald-400',
+                info: 'fa-wand-magic-sparkles text-sky-400',
+                warning: 'fa-triangle-exclamation text-amber-400',
+                error: 'fa-circle-xmark text-rose-400'
+            };
+
+            toast.className = `pointer-events-auto flex items-center gap-3 px-4 py-3 rounded-xl border-r-4 shadow-xl text-xs font-bold transition-all duration-300 transform translate-y-2 opacity-0 ${colors[type] || colors.info}`;
+            toast.innerHTML = `
+                <i class="fa-solid ${icons[type] || icons.info} text-base"></i>
+                <span class="flex-1 leading-relaxed">${message}</span>
+            `;
+
+            container.appendChild(toast);
+            requestAnimationFrame(() => {
+                toast.classList.remove('translate-y-2', 'opacity-0');
+            });
+
+            setTimeout(() => {
+                toast.classList.add('opacity-0', 'translate-y-2');
+                setTimeout(() => toast.remove(), 300);
+            }, 4200);
+        }
+
+        // ==========================================
+        // 3. SMART COMPUTER VISION ENGINE (AUTO-DETECT 1 OR 2 CARDS + CORNERS)
+        // ==========================================
+        /**
+         * Analyzes an image locally on an offscreen canvas to automatically detect:
+         * - Whether there are 1 or 2 separate ID cards (e.g. Front & Back on a scanner bed)
+         * - Exact bounding boxes & 4 corner vertices of each card against the background
+         */
+        function detectIDCardsInImage(imgEl) {
+            const analysisWidth = 360;
+            const scale = analysisWidth / imgEl.naturalWidth;
+            const analysisHeight = Math.max(120, Math.round(imgEl.naturalHeight * scale));
+
+            const cvCanvas = document.createElement('canvas');
+            cvCanvas.width = analysisWidth;
+            cvCanvas.height = analysisHeight;
+            const ctx = cvCanvas.getContext('2d');
+            ctx.drawImage(imgEl, 0, 0, analysisWidth, analysisHeight);
+
+            const imgData = ctx.getImageData(0, 0, analysisWidth, analysisHeight);
+            const data = imgData.data;
+
+            // Step 1: Estimate Background Color from border perimeter pixels
+            let bgR = 0, bgG = 0, bgB = 0, borderSamples = 0;
+            const step = 4;
+            for (let x = 0; x < analysisWidth; x += step) {
+                for (const y of [2, 5, analysisHeight - 3, analysisHeight - 6]) {
+                    const idx = (y * analysisWidth + x) * 4;
+                    bgR += data[idx]; bgG += data[idx + 1]; bgB += data[idx + 2];
+                    borderSamples++;
+                }
+            }
+            for (let y = 0; y < analysisHeight; y += step) {
+                for (const x of [2, 5, analysisWidth - 3, analysisWidth - 6]) {
+                    const idx = (y * analysisWidth + x) * 4;
+                    bgR += data[idx]; bgG += data[idx + 1]; bgB += data[idx + 2];
+                    borderSamples++;
+                }
+            }
+            bgR /= borderSamples; bgG /= borderSamples; bgB /= borderSamples;
+
+            // Step 2: Create Foreground Binary Mask using Color Distance + Local Edge Gradient
+            const mask = new Uint8Array(analysisWidth * analysisHeight);
+            for (let y = 2; y < analysisHeight - 2; y++) {
+                for (let x = 2; x < analysisWidth - 2; x++) {
+                    const idx = (y * analysisWidth + x) * 4;
+                    const r = data[idx], g = data[idx + 1], b = data[idx + 2];
+
+                    // Euclidean color difference from background
+                    const colorDiff = Math.sqrt((r - bgR) ** 2 + (g - bgG) ** 2 + (b - bgB) ** 2);
+
+                    // Local Sobel-like gradient to catch white cards on light scanner backgrounds
+                    const idxRight = (y * analysisWidth + (x + 2)) * 4;
+                    const idxDown = ((y + 2) * analysisWidth + x) * 4;
+                    const gradX = Math.abs(r - data[idxRight]) + Math.abs(g - data[idxRight + 1]) + Math.abs(b - data[idxRight + 2]);
+                    const gradY = Math.abs(r - data[idxDown]) + Math.abs(g - data[idxDown + 1]) + Math.abs(b - data[idxDown + 2]);
+                    const edgeStrength = (gradX + gradY) / 3;
+
+                    if (colorDiff > 24 || edgeStrength > 18) {
+                        mask[y * analysisWidth + x] = 1;
+                    }
+                }
+            }
+
+            // Step 3: Morphological Closing (3x3 Dilation) to bridge internal card areas
+            const closedMask = new Uint8Array(analysisWidth * analysisHeight);
+            for (let y = 2; y < analysisHeight - 2; y++) {
+                for (let x = 2; x < analysisWidth - 2; x++) {
+                    let sum = 0;
+                    for (let dy = -2; dy <= 2; dy++) {
+                        for (let dx = -2; dx <= 2; dx++) {
+                            sum += mask[(y + dy) * analysisWidth + (x + dx)];
+                        }
+                    }
+                    if (sum >= 5) closedMask[y * analysisWidth + x] = 1;
+                }
+            }
+
+            // Step 4: Connected Components Labeling (Flood Fill) to find distinct Card Blobs
+            const visited = new Uint8Array(analysisWidth * analysisHeight);
+            const components = [];
+            const minCardPixels = (analysisWidth * analysisHeight) * 0.04; // At least 4% of image area
+
+            for (let y = 4; y < analysisHeight - 4; y++) {
+                for (let x = 4; x < analysisWidth - 4; x++) {
+                    const startIdx = y * analysisWidth + x;
+                    if (closedMask[startIdx] === 1 && !visited[startIdx]) {
+                        const queue = [startIdx];
+                        visited[startIdx] = 1;
+
+                        let minX = x, maxX = x, minY = y, maxY = y;
+                        let pixelCount = 0;
+
+                        // Extremal corner candidates using diagonal projections:
+                        // TL: min(x+y), TR: max(x-y), BR: max(x+y), BL: min(x-y)
+                        let tlScore = Infinity, trScore = -Infinity, brScore = -Infinity, blScore = Infinity;
+                        let tlPt = { x, y }, trPt = { x, y }, brPt = { x, y }, blPt = { x, y };
+
+                        while (queue.length > 0) {
+                            const curr = queue.pop();
+                            const cy = Math.floor(curr / analysisWidth);
+                            const cx = curr % analysisWidth;
+                            pixelCount++;
+
+                            if (cx < minX) minX = cx;
+                            if (cx > maxX) maxX = cx;
+                            if (cy < minY) minY = cy;
+                            if (cy > maxY) maxY = cy;
+
+                            // Update 4-corner extremal vertices
+                            const sumXY = cx + cy;
+                            const diffXY = cx - cy;
+                            if (sumXY < tlScore) { tlScore = sumXY; tlPt = { x: cx, y: cy }; }
+                            if (diffXY > trScore) { trScore = diffXY; trPt = { x: cx, y: cy }; }
+                            if (sumXY > brScore) { brScore = sumXY; brPt = { x: cx, y: cy }; }
+                            if (diffXY < blScore) { blScore = diffXY; blPt = { x: cx, y: cy }; }
+
+                            // 4-neighbors
+                            const neighbors = [
+                                curr - 1, curr + 1,
+                                curr - analysisWidth, curr + analysisWidth
+                            ];
+                            for (const n of neighbors) {
+                                if (n >= 0 && n < visited.length && closedMask[n] === 1 && !visited[n]) {
+                                    visited[n] = 1;
+                                    queue.push(n);
+                                }
+                            }
+                        }
+
+                        const bw = maxX - minX;
+                        const bh = maxY - minY;
+                        if (pixelCount >= minCardPixels && bw > 35 && bh > 25) {
+                            // Check if the polygon is noticeably tilted/skewed compared to axis-aligned box
+                            const topSlope = Math.abs(trPt.y - tlPt.y) / Math.max(1, trPt.x - tlPt.x);
+                            const leftSlope = Math.abs(blPt.x - tlPt.x) / Math.max(1, blPt.y - tlPt.y);
+                            const isSkewed = (topSlope > 0.06 || leftSlope > 0.06);
+
+                            components.push({
+                                pixelCount,
+                                bbox: {
+                                    x: Math.max(0, (minX - 2) / scale),
+                                    y: Math.max(0, (minY - 2) / scale),
+                                    width: Math.min(imgEl.naturalWidth, (bw + 4) / scale),
+                                    height: Math.min(imgEl.naturalHeight, (bh + 4) / scale)
+                                },
+                                cornersNorm: [
+                                    { x: tlPt.x / analysisWidth, y: tlPt.y / analysisHeight },
+                                    { x: trPt.x / analysisWidth, y: trPt.y / analysisHeight },
+                                    { x: brPt.x / analysisWidth, y: brPt.y / analysisHeight },
+                                    { x: blPt.x / analysisWidth, y: blPt.y / analysisHeight }
+                                ],
+                                centerX: (minX + maxX) / 2,
+                                isSkewed
+                            });
+                        }
+                    }
+                }
+            }
+
+            // Sort largest valid components first, take up to 2 cards (Front & Back)
+            components.sort((a, b) => b.pixelCount - a.pixelCount);
+            let detected = components.slice(0, 2);
+
+            // If 2 cards are found, sort them Right-to-Left (so Right card is Front #1, Left card is Back #2)
+            if (detected.length === 2) {
+                detected.sort((a, b) => b.centerX - a.centerX);
+            }
+
+            // Fallback if image is uniform or full-bleed
+            if (detected.length === 0) {
+                const padW = imgEl.naturalWidth * 0.08;
+                const padH = imgEl.naturalHeight * 0.08;
+                detected = [{
+                    pixelCount: 1000,
+                    bbox: {
+                        x: padW,
+                        y: padH,
+                        width: imgEl.naturalWidth - padW * 2,
+                        height: imgEl.naturalHeight - padH * 2
+                    },
+                    cornersNorm: [
+                        { x: 0.08, y: 0.08 },
+                        { x: 0.92, y: 0.08 },
+                        { x: 0.92, y: 0.92 },
+                        { x: 0.08, y: 0.92 }
+                    ],
+                    isSkewed: false
+                }];
+            }
+
+            return detected;
+        }
+
+        // ==========================================
+        // 4. UPLOAD, PASTE & SMART AUTO-CAPTURE WORKFLOW
+        // ==========================================
+        function setupDragAndDropAndPaste() {
+            const dropzone = document.getElementById('cropper-dropzone');
+
+            dropzone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                dropzone.classList.add('ring-4', 'ring-blue-500');
+            });
+
+            dropzone.addEventListener('dragleave', () => {
+                dropzone.classList.remove('ring-4', 'ring-blue-500');
+            });
+
+            dropzone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                dropzone.classList.remove('ring-4', 'ring-blue-500');
+                if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                    loadFileIntoCropper(e.dataTransfer.files[0]);
+                }
+            });
+
+            window.addEventListener('paste', (e) => {
+                const items = (e.clipboardData || e.originalEvent.clipboardData)?.items;
+                if (!items) return;
+                for (let item of items) {
+                    if (item.type.indexOf('image') !== -1) {
+                        const file = item.getAsFile();
+                        loadFileIntoCropper(file);
+                        break;
+                    }
+                }
+            });
+        }
+
+        function handleImageUpload(event) {
+            const file = event.target.files[0];
+            if (file) {
+                loadFileIntoCropper(file);
+                event.target.value = ''; // Allow re-uploading same file
+            }
+        }
+
+        function loadFileIntoCropper(file) {
+            if (!file.type.startsWith('image/')) {
+                showToast('يرجى اختيار ملف صورة صالح (JPG, PNG, WEBP)', 'error');
+                return;
+            }
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                cancelManualEditMode();
+                loadNewImageWithSmartDetection(e.target.result, false);
+            };
+            reader.readAsDataURL(file);
+        }
+
+        /**
+         * Loads an image, runs the Smart CV Detector, positions the crop box (or 4 perspective corners)
+         * automatically, and if Auto-Capture is enabled, immediately crops & places the card(s) onto A4!
+         */
+        function loadNewImageWithSmartDetection(imgSrc, silent = false) {
+            currentUploadedImgSrc = imgSrc;
+            const emptyState = document.getElementById('empty-cropper-state');
+            const laserOverlay = document.getElementById('scanner-laser-overlay');
+
+            emptyState.classList.add('hidden');
+            laserOverlay.classList.remove('hidden');
+
+            const offscreenImg = new Image();
+            offscreenImg.onload = () => {
+                currentImageElement = offscreenImg;
+
+                // Run Smart Computer Vision Detection
+                lastDetectedCards = detectIDCardsInImage(offscreenImg);
+                const pillContainer = document.getElementById('detected-boxes-pills');
+                const statusPill = document.getElementById('smart-status-pill');
+                const summaryText = document.getElementById('detection-summary-text');
+
+                if (lastDetectedCards.length >= 2) {
+                    pillContainer.classList.remove('hidden');
+                    pillContainer.classList.add('flex');
+                    statusPill.textContent = 'تم اكتشاف بطاقتين (وجه + ظهر)';
+                    summaryText.textContent = 'تم التعرف الذكي على بطاقتين في نفس الصورة! يمكنك التبديل بينهما أو تعديل أي بطاقة يدوياً.';
+                } else {
+                    pillContainer.classList.add('hidden');
+                    pillContainer.classList.remove('flex');
+                    statusPill.textContent = lastDetectedCards[0]?.isSkewed ? 'تم اكتشاف بطاقة مائلة (4 زوايا)' : 'تم اكتشاف البطاقة تلقائياً';
+                    summaryText.textContent = 'تم تحديد حواف البطاقة تلقائياً — يمكنك تحريك الإطار أو الزوايا للتعديل اليدوي السريع.';
+                }
+
+                // Initialize 4-point corners from first detected card
+                if (lastDetectedCards[0] && lastDetectedCards[0].cornersNorm) {
+                    perspectiveCorners = JSON.parse(JSON.stringify(lastDetectedCards[0].cornersNorm));
+                }
+
+                // Automatically switch to 4-point Perspective mode if a skewed mobile photo is detected
+                if (lastDetectedCards.length === 1 && lastDetectedCards[0].isSkewed) {
+                    switchEditorMode('perspective', true);
+                } else {
+                    switchEditorMode('rect', true);
+                }
+
+                // Initialize Cropper.js on the image
+                initCropperInstance(imgSrc, () => {
+                    setTimeout(() => {
+                        laserOverlay.classList.add('hidden');
+                    }, 260);
+
+                    // Position Cropper on the first detected card
+                    if (lastDetectedCards[0] && cropper) {
+                        applyImageBBoxToCropper(lastDetectedCards[0].bbox);
+                    }
+
+                    // Perform Instant Auto-Capture if enabled
+                    const autoCaptureEnabled = document.getElementById('toggle-auto-capture').checked;
+                    if (autoCaptureEnabled) {
+                        performSmartAutoCapture(silent);
+                    } else if (!silent) {
+                        showToast('تم تحديد حواف البطاقة ذكياً! اضغط التحديث أو الإضافة عند الجاهزية.', 'info');
+                    }
+                });
+            };
+            offscreenImg.src = imgSrc;
+        }
+
+        function initCropperInstance(imgSrc, onReadyCallback) {
+            const imgElement = document.getElementById('cropper-image');
+            if (cropper) {
+                cropper.destroy();
+                cropper = null;
+            }
+
+            currentFlipX = 1;
+            currentFlipY = 1;
+            document.getElementById('fine-rotate-slider').value = 0;
+            document.getElementById('fine-rotate-val').textContent = '0.0°';
+
+            imgElement.src = imgSrc;
+            imgElement.onload = () => {
+                cropper = new Cropper(imgElement, {
+                    aspectRatio: activeCardSpec.aspectRatio,
+                    viewMode: 1,
+                    dragMode: 'move',
+                    autoCropArea: 0.85,
+                    restore: false,
+                    guides: true,
+                    center: true,
+                    highlight: true,
+                    cropBoxMovable: true,
+                    cropBoxResizable: true,
+                    toggleDragModeOnDblclick: true,
+                    ready() {
+                        if (onReadyCallback) onReadyCallback();
+                    },
+                    cropend() {
+                        // Live sync if user is manually adjusting an already captured card!
+                        if (activeManualEditTarget) {
+                            syncActiveManualEditLive();
+                        }
+                    }
+                });
+            };
+        }
+
+        /**
+         * Positions Cropper.js crop box directly onto a bounding box in natural image coordinates
+         */
+        function applyImageBBoxToCropper(bbox) {
+            if (!cropper || !bbox) return;
+            cropper.setData({
+                x: bbox.x,
+                y: bbox.y,
+                width: bbox.width,
+                height: bbox.height,
+                rotate: 0,
+                scaleX: 1,
+                scaleY: 1
+            });
+        }
+
+        function focusDetectedCard(index) {
+            if (!lastDetectedCards[index]) return;
+            const det = lastDetectedCards[index];
+            perspectiveCorners = JSON.parse(JSON.stringify(det.cornersNorm));
+            if (editorMode === 'perspective') {
+                renderPerspectiveEditorCanvas();
+            } else if (cropper) {
+                applyImageBBoxToCropper(det.bbox);
+            }
+            const label = index === 0 ? 'البطاقة الأولى (الوجه)' : 'البطاقة الثانية (الظهر)';
+            showToast(`تم توجيه إطار القص إلى ${label}`, 'info');
+        }
+
+        function runSmartDetectionOnCurrentImage(forceCapture = false) {
+            if (!currentImageElement) {
+                showToast('يرجى رفع صورة مستمسك أولاً!', 'warning');
+                return;
+            }
+            lastDetectedCards = detectIDCardsInImage(currentImageElement);
+            if (lastDetectedCards[0]) {
+                perspectiveCorners = JSON.parse(JSON.stringify(lastDetectedCards[0].cornersNorm));
+                if (editorMode === 'perspective') {
+                    renderPerspectiveEditorCanvas();
+                } else if (cropper) {
+                    applyImageBBoxToCropper(lastDetectedCards[0].bbox);
+                }
+            }
+            if (forceCapture) {
+                performSmartAutoCapture(false);
+            }
+        }
+
+        /**
+         * Automatically crops 1 or 2 detected cards, places them into Front/Back staging slots,
+         * and adds them directly onto the A4 print sheet with full metadata for later manual editing!
+         */
+        function performSmartAutoCapture(silent = false) {
+            if (!currentImageElement) return;
+
+            // CASE A: 2 Separate Cards Detected in the Same Scan (e.g. Front & Back together)
+            if (lastDetectedCards.length >= 2) {
+                const card1Res = extractCardFromBBoxOrCorners({
+                    mode: 'rect',
+                    bbox: lastDetectedCards[0].bbox,
+                    corners: lastDetectedCards[0].cornersNorm
+                });
+                const card2Res = extractCardFromBBoxOrCorners({
+                    mode: 'rect',
+                    bbox: lastDetectedCards[1].bbox,
+                    corners: lastDetectedCards[1].cornersNorm
+                });
+
+                if (card1Res && card2Res) {
+                    setStagingSlotData('front', card1Res);
+                    setStagingSlotData('back', card2Res);
+
+                    // Replace or add to A4 sheet automatically
+                    syncStagingSlotToA4('front', true);
+                    syncStagingSlotToA4('back', true);
+
+                    if (!silent) {
+                        showToast('تم اكتشاف (الوجه والظهر) معاً وقصهما تلقائياً إلى ورقة A4! يمكنك الضغط على "تعديل القص يدوياً" لأي بطاقة لتصحيحها.', 'success');
+                    } else {
+                        showToast('تم الفحص والقص الذكي التلقائي للوجه والظهر! جرب التعديل اليدوي أو ارفع مستمسكك.', 'info');
+                    }
+                }
+                return;
+            }
+
+            // CASE B: 1 Single Card Detected (Skewed Perspective or Standard Rect)
+            const det = lastDetectedCards[0];
+            const useMode = det.isSkewed ? 'perspective' : editorMode;
+            const extracted = extractCardFromBBoxOrCorners({
+                mode: useMode,
+                bbox: det.bbox,
+                corners: det.cornersNorm
+            });
+
+            if (!extracted) return;
+
+            // Decide target slot: if Front is empty, put in Front; if Front is filled and Back is empty, put in Back; otherwise update Front
+            let targetSlot = 'front';
+            if (stagingCards.front && !stagingCards.back) {
+                targetSlot = 'back';
+            }
+
+            setStagingSlotData(targetSlot, extracted);
+            syncStagingSlotToA4(targetSlot, true);
+
+            const slotNameAr = targetSlot === 'front' ? 'وجه البطاقة' : 'ظهر البطاقة';
+            if (!silent) {
+                showToast(`تم القص الذكي التلقائي وإضافته كـ (${slotNameAr}) في ورقة A4! اضغط "تعديل القص يدوياً" إذا رغبت بضبط الحواف.`, 'success');
+            }
+        }
+
+        // ==========================================
+        // 5. DUAL EDITOR MODES: RECT CROPPER VS 4-POINT PERSPECTIVE WARP + LOUPE
+        // ==========================================
+        function switchEditorMode(mode, skipRedraw = false) {
+            editorMode = mode;
+            const btnRect = document.getElementById('btn-mode-rect');
+            const btnPersp = document.getElementById('btn-mode-perspective');
+            const perspContainer = document.getElementById('perspective-editor-container');
+            const cropperImg = document.getElementById('cropper-image');
+            const rectTools = document.getElementById('rect-mode-tools');
+            const fineRotateBox = document.getElementById('fine-rotate-container');
+
+            if (mode === 'perspective') {
+                btnPersp.className = 'bg-white text-blue-700 shadow-sm px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5';
+                btnRect.className = 'text-slate-700 hover:text-slate-900 px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5';
+                perspContainer.classList.remove('hidden');
+                if (cropper && cropper.container) {
+                    cropper.container.classList.add('hidden');
+                }
+                cropperImg.classList.add('hidden');
+                rectTools.classList.add(' opacity-40', 'pointer-events-none');
+                fineRotateBox.classList.add('opacity-40', 'pointer-events-none');
+
+                if (currentImageElement && !skipRedraw) {
+                    renderPerspectiveEditorCanvas();
+                }
+            } else {
+                btnRect.className = 'bg-white text-blue-700 shadow-sm px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5';
+                btnPersp.className = 'text-slate-700 hover:text-slate-900 px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5';
+                perspContainer.classList.add('hidden');
+                if (cropper && cropper.container) {
+                    cropper.container.classList.remove('hidden');
+                }
+                rectTools.classList.remove('opacity-40', 'pointer-events-none');
+                fineRotateBox.classList.remove('opacity-40', 'pointer-events-none');
+            }
+
+            if (currentImageElement && mode === 'perspective') {
+                setTimeout(() => renderPerspectiveEditorCanvas(), 30);
+            }
+        }
+
+        function renderPerspectiveEditorCanvas() {
+            if (!currentImageElement) return;
+            const container = document.getElementById('perspective-editor-container');
+            const canvas = document.getElementById('perspective-canvas');
+            const ctx = canvas.getContext('2d');
+
+            const maxW = Math.max(320, container.clientWidth - 24);
+            const maxH = Math.max(260, container.clientHeight - 24);
+
+            const scale = Math.min(maxW / currentImageElement.naturalWidth, maxH / currentImageElement.naturalHeight);
+            perspectiveCanvasScale = scale;
+
+            canvas.width = Math.round(currentImageElement.naturalWidth * scale);
+            canvas.height = Math.round(currentImageElement.naturalHeight * scale);
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(currentImageElement, 0, 0, canvas.width, canvas.height);
+
+            // Convert normalized corners to canvas coordinates
+            const pts = perspectiveCorners.map(p => ({
+                x: p.x * canvas.width,
+                y: p.y * canvas.height
+            }));
+
+            // Darken outside polygon
+            ctx.save();
+            ctx.fillStyle = 'rgba(15, 23, 42, 0.55)';
+            ctx.beginPath();
+            ctx.rect(0, 0, canvas.width, canvas.height);
+            ctx.moveTo(pts[0].x, pts[0].y);
+            ctx.lineTo(pts[1].x, pts[1].y);
+            ctx.lineTo(pts[2].x, pts[2].y);
+            ctx.lineTo(pts[3].x, pts[3].y);
+            ctx.closePath();
+            ctx.fill('evenodd');
+            ctx.restore();
+
+            // Draw perspective quad border & internal grid lines
+            ctx.save();
+            ctx.strokeStyle = '#38bdf8';
+            ctx.lineWidth = 2.5;
+            ctx.beginPath();
+            ctx.moveTo(pts[0].x, pts[0].y);
+            ctx.lineTo(pts[1].x, pts[1].y);
+            ctx.lineTo(pts[2].x, pts[2].y);
+            ctx.lineTo(pts[3].x, pts[3].y);
+            ctx.closePath();
+            ctx.stroke();
+
+            // Subtle rule-of-thirds grid inside quad
+            ctx.strokeStyle = 'rgba(56, 189, 248, 0.35)';
+            ctx.lineWidth = 1;
+            ctx.setLineDash([4, 4]);
+            for (let t of [0.333, 0.666]) {
+                const topX = pts[0].x + (pts[1].x - pts[0].x) * t;
+                const topY = pts[0].y + (pts[1].y - pts[0].y) * t;
+                const botX = pts[3].x + (pts[2].x - pts[3].x) * t;
+                const botY = pts[3].y + (pts[2].y - pts[3].y) * t;
+                ctx.beginPath(); ctx.moveTo(topX, topY); ctx.lineTo(botX, botY); ctx.stroke();
+
+                const leftX = pts[0].x + (pts[3].x - pts[0].x) * t;
+                const leftY = pts[0].y + (pts[3].y - pts[0].y) * t;
+                const rightX = pts[1].x + (pts[2].x - pts[1].x) * t;
+                const rightY = pts[1].y + (pts[2].y - pts[1].y) * t;
+                ctx.beginPath(); ctx.moveTo(leftX, leftY); ctx.lineTo(rightX, rightY); ctx.stroke();
+            }
+            ctx.restore();
+
+            // Draw the 4 Corner Handles
+            const cornerLabels = ['أعلى يسار', 'أعلى يمين', 'أسفل يمين', 'أسفل يسار'];
+            pts.forEach((pt, idx) => {
+                ctx.save();
+                // Outer Halo
+                ctx.beginPath();
+                ctx.arc(pt.x, pt.y, 12, 0, Math.PI * 2);
+                ctx.fillStyle = idx === draggingCornerIdx ? 'rgba(245, 158, 11, 0.45)' : 'rgba(37, 99, 235, 0.35)';
+                ctx.fill();
+
+                // Main Handle Circle
+                ctx.beginPath();
+                ctx.arc(pt.x, pt.y, 7, 0, Math.PI * 2);
+                ctx.fillStyle = idx === draggingCornerIdx ? '#f59e0b' : '#ffffff';
+                ctx.fill();
+                ctx.lineWidth = 2.5;
+                ctx.strokeStyle = '#1d4ed8';
+                ctx.stroke();
+
+                // Center precision dot
+                ctx.beginPath();
+                ctx.arc(pt.x, pt.y, 2, 0, Math.PI * 2);
+                ctx.fillStyle = '#0f172a';
+                ctx.fill();
+                ctx.restore();
+            });
+        }
+
+        function setupPerspectiveCanvasEvents() {
+            const canvas = document.getElementById('perspective-canvas');
+            const loupe = document.getElementById('perspective-loupe');
+
+            function getPointerPos(e) {
+                const rect = canvas.getBoundingClientRect();
+                const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+                return {
+                    x: clientX - rect.left,
+                    y: clientY - rect.top
+                };
+            }
+
+            function onPointerDown(e) {
+                if (editorMode !== 'perspective' || !currentImageElement) return;
+                const pos = getPointerPos(e);
+                let bestIdx = -1;
+                let minDist = 28; // Grab radius in pixels
+
+                perspectiveCorners.forEach((c, idx) => {
+                    const cx = c.x * canvas.width;
+                    const cy = c.y * canvas.height;
+                    const dist = Math.hypot(pos.x - cx, pos.y - cy);
+                    if (dist < minDist) {
+                        minDist = dist;
+                        bestIdx = idx;
+                    }
+                });
+
+                if (bestIdx !== -1) {
+                    e.preventDefault();
+                    draggingCornerIdx = bestIdx;
+                    updatePerspectiveLoupe(pos.x, pos.y, bestIdx);
+                    renderPerspectiveEditorCanvas();
+                }
+            }
+
+            function onPointerMove(e) {
+                if (draggingCornerIdx === -1 || editorMode !== 'perspective') return;
+                e.preventDefault();
+                const pos = getPointerPos(e);
+                const normX = Math.min(0.99, Math.max(0.01, pos.x / canvas.width));
+                const normY = Math.min(0.99, Math.max(0.01, pos.y / canvas.height));
+
+                perspectiveCorners[draggingCornerIdx] = { x: normX, y: normY };
+                renderPerspectiveEditorCanvas();
+                updatePerspectiveLoupe(normX * canvas.width, normY * canvas.height, draggingCornerIdx);
+            }
+
+            function onPointerUp() {
+                if (draggingCornerIdx !== -1) {
+                    draggingCornerIdx = -1;
+                    loupe.classList.add('hidden');
+                    renderPerspectiveEditorCanvas();
+                    // Live sync to captured card!
+                    if (activeManualEditTarget) {
+                        syncActiveManualEditLive();
+                    }
+                }
+            }
+
+            canvas.addEventListener('mousedown', onPointerDown);
+            window.addEventListener('mousemove', onPointerMove);
+            window.addEventListener('mouseup', onPointerUp);
+
+            canvas.addEventListener('touchstart', onPointerDown, { passive: false });
+            window.addEventListener('touchmove', onPointerMove, { passive: false });
+            window.addEventListener('touchend', onPointerUp);
+        }
+
+        function updatePerspectiveLoupe(canvasX, canvasY, cornerIdx) {
+            if (!currentImageElement) return;
+            const loupe = document.getElementById('perspective-loupe');
+            const loupeCanvas = document.getElementById('loupe-canvas');
+            const lCtx = loupeCanvas.getContext('2d');
+            const labelEl = document.getElementById('loupe-corner-label');
+            const names = ['زاوية أعلى اليسار', 'زاوية أعلى اليمين', 'زاوية أسفل اليمين', 'زاوية أسفل اليسار'];
+
+            loupe.classList.remove('hidden');
+            labelEl.textContent = names[cornerIdx] || 'الزاوية';
+
+            // Move loupe to opposite side if pointer is in top-left corner
+            if (canvasX < 150 && canvasY < 150) {
+                loupe.style.left = 'auto';
+                loupe.style.right = '12px';
+            } else {
+                loupe.style.right = 'auto';
+                loupe.style.left = '12px';
+            }
+
+            const imgX = canvasX / perspectiveCanvasScale;
+            const imgY = canvasY / perspectiveCanvasScale;
+            const zoomRadius = 32; // Source pixels around corner
+
+            lCtx.fillStyle = '#0f172a';
+            lCtx.fillRect(0, 0, 128, 128);
+            lCtx.drawImage(
+                currentImageElement,
+                imgX - zoomRadius, imgY - zoomRadius, zoomRadius * 2, zoomRadius * 2,
+                0, 0, 128, 128
+            );
+        }
+
+        /**
+         * Performs 4-Point Perspective Homography / Bilinear Rectification onto a 300 DPI target canvas
+         */
+        function warpPerspectiveFrom4Corners(imgEl, cornersNorm, targetW, targetH) {
+            const srcCanvas = document.createElement('canvas');
+            srcCanvas.width = imgEl.naturalWidth;
+            srcCanvas.height = imgEl.naturalHeight;
+            const sCtx = srcCanvas.getContext('2d');
+            sCtx.drawImage(imgEl, 0, 0);
+            const srcData = sCtx.getImageData(0, 0, srcCanvas.width, srcCanvas.height).data;
+
+            const dstCanvas = document.createElement('canvas');
+            dstCanvas.width = targetW;
+            dstCanvas.height = targetH;
+            const dCtx = dstCanvas.getContext('2d');
+            const dstImgData = dCtx.createImageData(targetW, targetH);
+            const dstData = dstImgData.data;
+
+            const sw = srcCanvas.width;
+            const sh = srcCanvas.height;
+            const p0 = { x: cornersNorm[0].x * sw, y: cornersNorm[0].y * sh }; // TL
+            const p1 = { x: cornersNorm[1].x * sw, y: cornersNorm[1].y * sh }; // TR
+            const p2 = { x: cornersNorm[2].x * sw, y: cornersNorm[2].y * sh }; // BR
+            const p3 = { x: cornersNorm[3].x * sw, y: cornersNorm[3].y * sh }; // BL
+
+            for (let y = 0; y < targetH; y++) {
+                const v = y / (targetH - 1);
+                const topX = p0.x + (p1.x - p0.x) * 0;
+                for (let x = 0; x < targetW; x++) {
+                    const u = x / (targetW - 1);
+                    // Bilinear interpolation in projective quad
+                    const sx = (1 - u) * (1 - v) * p0.x + u * (1 - v) * p1.x + u * v * p2.x + (1 - u) * v * p3.x;
+                    const sy = (1 - u) * (1 - v) * p0.y + u * (1 - v) * p1.y + u * v * p2.y + (1 - u) * v * p3.y;
+
+                    const ix = Math.min(sw - 1, Math.max(0, Math.round(sx)));
+                    const iy = Math.min(sh - 1, Math.max(0, Math.round(sy)));
+                    const sIdx = (iy * sw + ix) * 4;
+                    const dIdx = (y * targetW + x) * 4;
+
+                    dstData[dIdx] = srcData[sIdx];
+                    dstData[dIdx + 1] = srcData[sIdx + 1];
+                    dstData[dIdx + 2] = srcData[sIdx + 2];
+                    dstData[dIdx + 3] = 255;
+                }
+            }
+            dCtx.putImageData(dstImgData, 0, 0);
+            return dstCanvas;
+        }
+
+        // ==========================================
+        // 6. DEMO SCENARIOS GENERATOR (DUAL SCANNER, SINGLE CARD, SKEWED MOBILE)
+        // ==========================================
+        function loadDemoScenario(scenarioType, silent = false) {
+            cancelManualEditMode();
+            const canvas = document.createElement('canvas');
+            canvas.width = 1400;
+            canvas.height = 950;
+            const ctx = canvas.getContext('2d');
+
+            // Helper to draw a realistic ID card face
+            function drawMockCardOnCtx(c, x, y, w, h, isFront) {
+                c.save();
+                c.fillStyle = '#ffffff';
+                c.strokeStyle = '#475569';
+                c.lineWidth = 4;
+                c.beginPath();
+                c.roundRect(x, y, w, h, 24);
+                c.fill();
+                c.stroke();
+
+                c.fillStyle = isFront ? '#1e40af' : '#0f172a';
+                c.beginPath();
+                c.roundRect(x, y, w, 78, [24, 24, 0, 0]);
+                c.fill();
+
+                c.fillStyle = '#ffffff';
+                c.font = 'bold 25px Cairo, sans-serif';
+                c.textAlign = 'right';
+                c.fillText(isFront ? 'بطاقة مستمسك قياسية (الوجه الأمامي)' : 'بطاقة مستمسك قياسية (الظهر الخلفي)', x + w - 26, y + 48);
+
+                c.font = 'bold 17px Inter, sans-serif';
+                c.textAlign = 'left';
+                c.fillText('CR80: 85.6 × 54 mm', x + 26, y + 48);
+
+                if (isFront) {
+                    c.fillStyle = '#e2e8f0';
+                    c.strokeStyle = '#64748b';
+                    c.lineWidth = 2;
+                    c.fillRect(x + w - 185, y + 108, 150, 192);
+                    c.strokeRect(x + w - 185, y + 108, 150, 192);
+
+                    c.fillStyle = '#475569';
+                    c.beginPath(); c.arc(x + w - 110, y + 172, 34, 0, Math.PI * 2); c.fill();
+                    c.beginPath(); c.arc(x + w - 110, y + 275, 55, Math.PI, 0); c.fill();
+
+                    c.textAlign = 'right';
+                    c.fillStyle = '#0f172a';
+                    c.font = 'bold 24px Cairo, sans-serif';
+                    c.fillText('الاسم: نموذج فحص القص الذكي التلقائي', x + w - 208, y + 145);
+
+                    c.fillStyle = '#334155';
+                    c.font = 'bold 20px Cairo, sans-serif';
+                    c.fillText('القياس: 85.6 × 54 ملم (دقة 300 DPI)', x + w - 208, y + 195);
+                    c.fillText('محل وتاريخ الإصدار: بغداد - 2026/10/16', x + w - 208, y + 240);
+                    c.fillText('الرقم الموحد: 199488520014', x + w - 208, y + 285);
+
+                    c.fillStyle = '#f59e0b';
+                    c.beginPath(); c.roundRect(x + 42, y + 135, 82, 64, 10); c.fill();
+                    c.strokeStyle = '#b45309'; c.strokeRect(x + 42, y + 135, 82, 64);
+
+                    c.fillStyle = '#1d4ed8';
+                    c.font = 'bold 17px Cairo, sans-serif';
+                    c.fillText('● تم التعرف على الحواف تلقائياً ويمكنك التعديل يدوياً', x + w - 30, y + h - 24);
+                } else {
+                    c.textAlign = 'right';
+                    c.fillStyle = '#0f172a';
+                    c.font = 'bold 22px Cairo, sans-serif';
+                    c.fillText('بيانات السكن والعنوان (الظهر):', x + w - 35, y + 130);
+
+                    c.fillStyle = '#334155';
+                    c.font = '20px Cairo, sans-serif';
+                    c.fillText('المحافظة: بغداد  |  القضاء: الكرادة  |  المحلة: 903  |  الدار: 22', x + w - 35, y + 175);
+                    c.fillText('الجهة المصدرة: مديرية الأحوال المدنية والجوازات والإقامة', x + w - 35, y + 220);
+
+                    c.fillStyle = '#0f172a';
+                    for (let bx = x + 40; bx < x + w - 40; bx += 9) {
+                        const bw = (bx % 18 === 0) ? 5 : 2;
+                        c.fillRect(bx, y + 255, bw, 50);
+                    }
+                    c.font = 'bold 18px Inter, monospace';
+                    c.textAlign = 'center';
+                    c.fillText('IDIRQ<<992837465<<20261016<<<<<<<<<<<<', x + w / 2, y + h - 22);
+                }
+                c.restore();
+            }
+
+            if (scenarioType === 'dual_scanner') {
+                // Dark scanner lid background so CV cleanly isolates both cards
+                ctx.fillStyle = '#1e293b';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                drawMockCardOnCtx(ctx, 730, 80, 610, 385, true);  // Front on Right
+                drawMockCardOnCtx(ctx, 60, 480, 610, 385, false); // Back on Left
+            } else if (scenarioType === 'single_card') {
+                ctx.fillStyle = '#1e293b';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                drawMockCardOnCtx(ctx, 320, 210, 760, 480, true);
+            } else if (scenarioType === 'skewed_mobile') {
+                // Dark wood/table surface with a tilted card (simulating mobile WhatsApp photo)
+                ctx.fillStyle = '#27272a';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.save();
+                ctx.translate(700, 475);
+                ctx.rotate(-0.14); // Tilted by ~8 degrees
+                ctx.scale(1.0, 0.94);
+                drawMockCardOnCtx(ctx, -380, -240, 760, 480, true);
+                ctx.restore();
+            }
+
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
+            loadNewImageWithSmartDetection(dataUrl, silent);
+        }
+
+        function loadDemoIDCard(silent = false) {
+            loadDemoScenario('dual_scanner', silent);
+        }
+
+        // ==========================================
+        // 7. CROPPER CONTROLS & PRESETS
+        // ==========================================
+        function setCardPreset(presetId, widthMM, heightMM) {
+            activeCardSpec.id = presetId;
+            activeCardSpec.widthMM = widthMM;
+            activeCardSpec.heightMM = heightMM;
+            activeCardSpec.aspectRatio = presetId === 'free' ? NaN : (widthMM / heightMM);
+
+            document.querySelectorAll('.preset-btn').forEach(btn => {
+                btn.className = 'preset-btn bg-white hover:bg-slate-200 text-slate-700 border border-slate-300 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition';
+            });
+            const activeBtn = document.getElementById(`preset-${presetId}`);
+            if (activeBtn) {
+                activeBtn.className = 'preset-btn bg-blue-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition shadow-sm';
+            }
+
+            document.getElementById('active-size-label').textContent = `${widthMM}×${heightMM} مم`;
+
+            if (cropper) {
+                cropper.setAspectRatio(activeCardSpec.aspectRatio);
+            }
+        }
+
+        function rotateCropper(deg) {
+            if (!cropper) return;
+            cropper.rotate(deg);
+            if (activeManualEditTarget) syncActiveManualEditLive();
+        }
+
+        function handleFineRotation(degValue) {
+            document.getElementById('fine-rotate-val').textContent = `${parseFloat(degValue).toFixed(1)}°`;
+            if (!cropper) return;
+            cropper.rotateTo(parseFloat(degValue));
+            if (activeManualEditTarget) syncActiveManualEditLive();
+        }
+
+        function flipCropper(axis) {
+            if (!cropper) return;
+            if (axis === 'h') {
+                currentFlipX = -currentFlipX;
+                cropper.scaleX(currentFlipX);
+            } else {
+                currentFlipY = -currentFlipY;
+                cropper.scaleY(currentFlipY);
+            }
+            if (activeManualEditTarget) syncActiveManualEditLive();
+        }
+
+        function resetCropper() {
+            if (lastDetectedCards[0]) {
+                perspectiveCorners = JSON.parse(JSON.stringify(lastDetectedCards[0].cornersNorm));
+                if (editorMode === 'perspective') {
+                    renderPerspectiveEditorCanvas();
+                } else if (cropper) {
+                    cropper.reset();
+                    applyImageBBoxToCropper(lastDetectedCards[0].bbox);
+                }
+            } else if (cropper) {
+                cropper.reset();
+            }
+            currentFlipX = 1;
+            currentFlipY = 1;
+            document.getElementById('fine-rotate-slider').value = 0;
+            document.getElementById('fine-rotate-val').textContent = '0.0°';
+            showToast('تمت إعادة ضبط إطار القص التلقائي الذكي', 'info');
+        }
+
+        // ==========================================
+        // 8. IMAGE ENHANCEMENT & 300 DPI EXTRACTION ENGINE
+        // ==========================================
+        function setColorMode(mode) {
+            filterState.mode = mode.trim();
+            document.querySelectorAll('.mode-btn').forEach(btn => {
+                btn.className = 'mode-btn border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 p-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition';
+            });
+
+            const activeBtn = document.getElementById(`mode-${filterState.mode}`);
+            if (activeBtn) {
+                activeBtn.className = 'mode-btn border-2 border-blue-600 bg-blue-50/70 text-blue-900 p-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition';
+            }
+
+            if (filterState.mode === 'photocopy') {
+                document.getElementById('filter-brightness').value = 112;
+                document.getElementById('filter-contrast').value = 135;
+                document.getElementById('filter-whiten').value = 45;
+            }
+            updateFilterSettings();
+        }
+
+        function updateFilterSettings() {
+            filterState.brightness = parseInt(document.getElementById('filter-brightness').value, 10);
+            filterState.contrast = parseInt(document.getElementById('filter-contrast').value, 10);
+            filterState.whiten = parseInt(document.getElementById('filter-whiten').value, 10);
+            filterState.sharpness = parseInt(document.getElementById('filter-sharpness').value, 10);
+
+            document.getElementById('val-brightness').textContent = `${filterState.brightness}%`;
+            document.getElementById('val-contrast').textContent = `${filterState.contrast}%`;
+            document.getElementById('val-whiten').textContent = `${filterState.whiten}%`;
+            document.getElementById('val-sharpness').textContent = `${filterState.sharpness}%`;
+
+            const grayscaleCss = (filterState.mode === 'grayscale' || filterState.mode === 'photocopy') ? 'grayscale(100%)' : 'grayscale(0%)';
+            const extraBright = filterState.brightness + Math.round(filterState.whiten * 0.2);
+            const extraContrast = filterState.contrast + Math.round(filterState.whiten * 0.35);
+            const cssFilterString = `${grayscaleCss} brightness(${extraBright}%) contrast(${extraContrast}%)`;
+            document.documentElement.style.setProperty('--live-crop-filter', cssFilterString);
+
+            if (activeManualEditTarget) {
+                syncActiveManualEditLive();
+            }
+        }
+
+        function resetFilters() {
+            filterState.mode = 'color';
+            document.getElementById('filter-brightness').value = 100;
+            document.getElementById('filter-contrast').value = 105;
+            document.getElementById('filter-whiten').value = 0;
+            document.getElementById('filter-sharpness').value = 20;
+            setColorMode('color');
+            showToast('تمت استعادة الإعدادات اللونية الأصلية', 'info');
+        }
+
+        /**
+         * Universal 300 DPI Card Extractor that works for:
+         * 1. Current active editor state (Rect Cropper OR 4-Point Perspective)
+         * 2. Arbitrary BBox or 4-Corners passed by the Smart Auto-Detector
+         */
+        function extractEnhancedCroppedCard() {
+            return extractCardFromBBoxOrCorners({
+                mode: editorMode,
+                bbox: cropper ? cropper.getData() : null,
+                corners: perspectiveCorners
+            });
+        }
+
+        function extractCardFromBBoxOrCorners(options = {}) {
+            if (!currentImageElement) {
+                showToast('يرجى رفع صورة مستمسك أولاً!', 'error');
+                return null;
+            }
+
+            const pxPerMM = 300 / 25.4;
+            const targetWidthPx = Math.round(activeCardSpec.widthMM * pxPerMM);
+            const targetHeightPx = Math.round(activeCardSpec.heightMM * pxPerMM);
+
+            let rawCanvas = null;
+            const useMode = options.mode || editorMode;
+
+            if (useMode === 'perspective' && options.corners) {
+                rawCanvas = warpPerspectiveFrom4Corners(currentImageElement, options.corners, targetWidthPx, targetHeightPx);
+            } else if (options.bbox && (!cropper || options.bbox !== cropper.getData())) {
+                // Direct extraction from image bounding box (used during multi-card auto-capture)
+                rawCanvas = document.createElement('canvas');
+                rawCanvas.width = targetWidthPx;
+                rawCanvas.height = targetHeightPx;
+                const rCtx = rawCanvas.getContext('2d');
+                rCtx.fillStyle = '#ffffff';
+                rCtx.fillRect(0, 0, targetWidthPx, targetHeightPx);
+                rCtx.drawImage(
+                    currentImageElement,
+                    options.bbox.x, options.bbox.y, options.bbox.width, options.bbox.height,
+                    0, 0, targetWidthPx, targetHeightPx
+                );
+            } else if (cropper) {
+                rawCanvas = cropper.getCroppedCanvas({
+                    width: targetWidthPx,
+                    height: targetHeightPx,
+                    imageSmoothingEnabled: true,
+                    imageSmoothingQuality: 'high',
+                    fillColor: '#ffffff'
+                });
+            }
+
+            if (!rawCanvas) return null;
+
+            const outCanvas = document.createElement('canvas');
+            outCanvas.width = rawCanvas.width;
+            outCanvas.height = rawCanvas.height;
+            const ctx = outCanvas.getContext('2d');
+
+            const isGray = (filterState.mode === 'grayscale' || filterState.mode === 'photocopy');
+            ctx.filter = `${isGray ? 'grayscale(100%)' : ''} brightness(${filterState.brightness}%) contrast(${filterState.contrast}%)`;
+            ctx.drawImage(rawCanvas, 0, 0);
+            ctx.filter = 'none';
+
+            if (filterState.whiten > 0 || filterState.mode === 'photocopy') {
+                const imgData = ctx.getImageData(0, 0, outCanvas.width, outCanvas.height);
+                const data = imgData.data;
+                const whiteThreshold = 252 - Math.round((filterState.whiten / 100) * 65);
+
+                for (let i = 0; i < data.length; i += 4) {
+                    const r = data[i], g = data[i + 1], b = data[i + 2];
+                    const luminance = 0.299 * r + 0.587 * g + 0.114 * b;
+
+                    if (luminance >= whiteThreshold) {
+                        data[i] = 255; data[i + 1] = 255; data[i + 2] = 255;
+                    } else if (filterState.mode === 'photocopy' && luminance < 95) {
+                        data[i] = Math.max(0, r * 0.82);
+                        data[i + 1] = Math.max(0, g * 0.82);
+                        data[i + 2] = Math.max(0, b * 0.82);
+                    }
+                }
+                ctx.putImageData(imgData, 0, 0);
+            }
+
+            if (filterState.sharpness > 15) {
+                applySharpenFilter(ctx, outCanvas.width, outCanvas.height, (filterState.sharpness / 100) * 0.45);
+            }
+
+            return {
+                dataUrl: outCanvas.toDataURL('image/jpeg', 0.96),
+                widthMM: activeCardSpec.widthMM,
+                heightMM: activeCardSpec.heightMM,
+                sourceMeta: {
+                    imgSrc: currentUploadedImgSrc,
+                    mode: useMode,
+                    cropData: options.bbox ? JSON.parse(JSON.stringify(options.bbox)) : (cropper ? cropper.getData() : null),
+                    corners: JSON.parse(JSON.stringify(options.corners || perspectiveCorners))
+                }
+            };
+        }
+
+        function applySharpenFilter(ctx, w, h, mix) {
+            const srcData = ctx.getImageData(0, 0, w, h);
+            const dstData = ctx.createImageData(w, h);
+            const src = srcData.data;
+            const dst = dstData.data;
+
+            for (let y = 1; y < h - 1; y++) {
+                for (let x = 1; x < w - 1; x++) {
+                    const idx = (y * w + x) * 4;
+                    for (let c = 0; c < 3; c++) {
+                        const center = src[idx + c] * 5;
+                        const neighbors =
+                            src[((y - 1) * w + x) * 4 + c] +
+                            src[((y + 1) * w + x) * 4 + c] +
+                            src[(y * w + (x - 1)) * 4 + c] +
+                            src[(y * w + (x + 1)) * 4 + c];
+                        const sharpened = center - neighbors;
+                        dst[idx + c] = Math.min(255, Math.max(0, src[idx + c] * (1 - mix) + sharpened * mix));
+                    }
+                    dst[idx + 3] = 255;
+                }
+            }
+            ctx.putImageData(dstData, 0, 0);
+        }
+
+        // ==========================================
+        // 9. STAGING AREA & MANUAL CORRECTION / LIVE SYNC ENGINE
+        // ==========================================
+        function setStagingSlotData(slot, result) {
+            stagingCards[slot] = result;
+            const previewContainer = document.getElementById(`staging-${slot}-preview`);
+            const clearBtn = document.getElementById(`clear-${slot}-btn`);
+            const editBtn = document.getElementById(`edit-${slot}-btn`);
+
+            previewContainer.innerHTML = `
+                <img src="${result.dataUrl}" class="w-full h-full object-contain" alt="${slot}">
+                <div class="absolute inset-0 bg-slate-900/50 opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
+                    <span class="bg-amber-400 text-slate-950 text-xs font-bold px-3 py-1.5 rounded-xl shadow flex items-center gap-1.5">
+                        <i class="fa-solid fa-pen-ruler"></i>
+                        <span>اضغط لتعديل القص يدوياً</span>
+                    </span>
+                </div>
+            `;
+            clearBtn.classList.remove('hidden');
+            editBtn.classList.remove('hidden');
+        }
+
+        function captureToStaging(slot, syncToA4 = false) {
+            const result = extractEnhancedCroppedCard();
+            if (!result) return;
+
+            setStagingSlotData(slot, result);
+            if (syncToA4) {
+                syncStagingSlotToA4(slot, false);
+            }
+
+            const labelAr = slot === 'front' ? 'وجه البطاقة' : 'ظهر البطاقة';
+            showToast(`تم التقاط وتحديث (${labelAr}) بنجاح!`, 'success');
+        }
+
+        /**
+         * Ensures the A4 sheet has the latest version of a staged slot (or adds it if not present yet)
+         */
+        function syncStagingSlotToA4(slot, addIfMissing = true) {
+            const cardData = stagingCards[slot];
+            if (!cardData) return;
+
+            const labelAr = slot === 'front' ? 'الوجه' : 'الظهر';
+            let updatedAny = false;
+
+            a4CardsList.forEach(item => {
+                if (item.slotRef === slot) {
+                    item.dataUrl = cardData.dataUrl;
+                    item.widthMM = cardData.widthMM;
+                    item.heightMM = cardData.heightMM;
+                    item.sourceMeta = cardData.sourceMeta;
+                    updatedAny = true;
+                }
+            });
+
+            if (!updatedAny && addIfMissing) {
+                a4CardsList.push({
+                    id: 'card_' + Date.now() + '_' + slot + '_' + Math.random().toString(36).slice(2, 6),
+                    slotRef: slot,
+                    dataUrl: cardData.dataUrl,
+                    label: labelAr,
+                    widthMM: cardData.widthMM,
+                    heightMM: cardData.heightMM,
+                    sourceMeta: cardData.sourceMeta
+                });
+            }
+
+            renderA4Sheet();
+        }
+
+        /**
+         * Opens a previously captured card (from Front/Back staging or directly from A4 sheet)
+         * in the interactive editor so the user can fine-tune its crop or 4 corners manually with Live Sync!
+         */
+        function editStagingSlotCrop(slot) {
+            const card = stagingCards[slot];
+            if (!card || !card.sourceMeta) return;
+
+            activeManualEditTarget = { type: 'staging', targetKey: slot };
+            highlightActiveEditingElements();
+
+            const slotAr = slot === 'front' ? 'وجه البطاقة (الأمام)' : 'ظهر البطاقة (الخلف)';
+            openSourceMetaInEditor(card.sourceMeta, `جاري تعديل (${slotAr}) — حرك إطار القص أو الزوايا وسيتم تحديث الورقة فوراً`);
+        }
+
+        function editA4CardCrop(cardId) {
+            const card = a4CardsList.find(c => c.id === cardId);
+            if (!card || !card.sourceMeta) return;
+
+            activeManualEditTarget = { type: 'a4', targetKey: cardId, slotRef: card.slotRef };
+            highlightActiveEditingElements();
+
+            openSourceMetaInEditor(card.sourceMeta, `جاري تعديل (${card.label}) في ورقة A4 — عدّل الحواف أو الزوايا للتحديث الفوري`);
+        }
+
+        function openSourceMetaInEditor(meta, bannerTitle) {
+            const banner = document.getElementById('live-edit-banner');
+            const titleEl = document.getElementById('live-edit-title');
+            banner.classList.remove('hidden');
+            titleEl.textContent = bannerTitle;
+
+            const restorePosition = () => {
+                if (meta.corners) {
+                    perspectiveCorners = JSON.parse(JSON.stringify(meta.corners));
+                }
+                switchEditorMode(meta.mode || 'rect');
+                if (meta.mode === 'perspective') {
+                    renderPerspectiveEditorCanvas();
+                } else if (cropper && meta.cropData) {
+                    cropper.setData(meta.cropData);
+                }
+            };
+
+            if (currentUploadedImgSrc !== meta.imgSrc) {
+                currentUploadedImgSrc = meta.imgSrc;
+                const offImg = new Image();
+                offImg.onload = () => {
+                    currentImageElement = offImg;
+                    initCropperInstance(meta.imgSrc, restorePosition);
+                };
+                offImg.src = meta.imgSrc;
+            } else {
+                restorePosition();
+            }
+
+            // Smooth scroll to editor on smaller screens
+            document.getElementById('cropper-dropzone').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            showToast('تم فتح البطاقة للتعديل اليدوي! حرك الإطار أو الزوايا لتصحيح القص.', 'info');
+        }
+
+        function syncActiveManualEditLive() {
+            if (!activeManualEditTarget) return;
+            const updated = extractEnhancedCroppedCard();
+            if (!updated) return;
+
+            if (activeManualEditTarget.type === 'staging') {
+                const slot = activeManualEditTarget.targetKey;
+                setStagingSlotData(slot, updated);
+                syncStagingSlotToA4(slot, false);
+            } else if (activeManualEditTarget.type === 'a4') {
+                const card = a4CardsList.find(c => c.id === activeManualEditTarget.targetKey);
+                if (card) {
+                    card.dataUrl = updated.dataUrl;
+                    card.widthMM = updated.widthMM;
+                    card.heightMM = updated.heightMM;
+                    card.sourceMeta = updated.sourceMeta;
+                }
+                if (activeManualEditTarget.slotRef && stagingCards[activeManualEditTarget.slotRef]) {
+                    setStagingSlotData(activeManualEditTarget.slotRef, updated);
+                }
+                renderA4Sheet();
+            }
+        }
+
+        function applyManualEditAndFinish() {
+            if (activeManualEditTarget) {
+                syncActiveManualEditLive();
+                cancelManualEditMode();
+                showToast('تم حفظ التعديل اليدوي وتحديث البطاقة على ورقة A4 بنجاح!', 'success');
+            } else {
+                // If not in explicit edit mode, update Front or active slot
+                captureToStaging('front', true);
+            }
+        }
+
+        function cancelManualEditMode() {
+            activeManualEditTarget = null;
+            document.getElementById('live-edit-banner').classList.add('hidden');
+            highlightActiveEditingElements();
+        }
+
+        function highlightActiveEditingElements() {
+            const frontBox = document.getElementById('staging-card-box-front');
+            const backBox = document.getElementById('staging-card-box-back');
+            frontBox.classList.remove('editing-active-ring');
+            backBox.classList.remove('editing-active-ring');
+
+            if (activeManualEditTarget?.type === 'staging') {
+                if (activeManualEditTarget.targetKey === 'front') frontBox.classList.add('editing-active-ring');
+                if (activeManualEditTarget.targetKey === 'back') backBox.classList.add('editing-active-ring');
+            }
+            renderA4Sheet();
+        }
+
+        function clearStagingSlot(slot) {
+            stagingCards[slot] = null;
+            const previewContainer = document.getElementById(`staging-${slot}-preview`);
+            const clearBtn = document.getElementById(`clear-${slot}-btn`);
+            const editBtn = document.getElementById(`edit-${slot}-btn`);
+
+            if (slot === 'front') {
+                previewContainer.innerHTML = `
+                    <i class="fa-regular fa-id-badge text-2xl text-slate-300 mb-1"></i>
+                    <span class="text-[11px] text-slate-400">يتم التقاط الوجه تلقائياً أو يدوياً</span>
+                `;
+            } else {
+                previewContainer.innerHTML = `
+                    <i class="fa-solid fa-barcode text-2xl text-slate-300 mb-1"></i>
+                    <span class="text-[11px] text-slate-400">يتم التقاط الظهر تلقائياً أو يدوياً</span>
+                `;
+            }
+            clearBtn.classList.add('hidden');
+            editBtn.classList.add('hidden');
+        }
+
+        function adjustCopies(delta) {
+            const input = document.getElementById('copies-count');
+            let val = parseInt(input.value, 10) || 1;
+            val = Math.min(10, Math.max(1, val + delta));
+            input.value = val;
+        }
+
+        function commitStagingToA4() {
+            if (!stagingCards.front && !stagingCards.back) {
+                const autoCrop = extractEnhancedCroppedCard();
+                if (!autoCrop) return;
+                setStagingSlotData('front', autoCrop);
+            }
+
+            const copies = Math.min(10, Math.max(1, parseInt(document.getElementById('copies-count').value, 10) || 1));
+
+            for (let i = 0; i < copies; i++) {
+                if (stagingCards.front) {
+                    a4CardsList.push({
+                        id: 'card_' + Date.now() + '_f_' + i + '_' + Math.random().toString(36).slice(2, 6),
+                        slotRef: 'front',
+                        dataUrl: stagingCards.front.dataUrl,
+                        label: 'الوجه',
+                        widthMM: stagingCards.front.widthMM,
+                        heightMM: stagingCards.front.heightMM,
+                        sourceMeta: stagingCards.front.sourceMeta
+                    });
+                }
+                if (stagingCards.back) {
+                    a4CardsList.push({
+                        id: 'card_' + Date.now() + '_b_' + i + '_' + Math.random().toString(36).slice(2, 6),
+                        slotRef: 'back',
+                        dataUrl: stagingCards.back.dataUrl,
+                        label: 'الظهر',
+                        widthMM: stagingCards.back.widthMM,
+                        heightMM: stagingCards.back.heightMM,
+                        sourceMeta: stagingCards.back.sourceMeta
+                    });
+                }
+            }
+
+            renderA4Sheet();
+            showToast(`تمت إضافة المستمسك (${copies} نسخة) إلى ورقة الطباعة A4!`, 'success');
+        }
+
+        function addCurrentCropDirectlyToA4() {
+            const cropped = extractEnhancedCroppedCard();
+            if (!cropped) return;
+
+            a4CardsList.push({
+                id: 'card_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+                slotRef: null,
+                dataUrl: cropped.dataUrl,
+                label: 'بطاقة',
+                widthMM: cropped.widthMM,
+                heightMM: cropped.heightMM,
+                sourceMeta: cropped.sourceMeta
+            });
+
+            renderA4Sheet();
+            showToast('تمت إضافة البطاقة المقصوصة مباشرة إلى ورقة A4', 'success');
+        }
+
+        // ==========================================
+        // 10. A4 SHEET LAYOUT & MANAGEMENT
+        // ==========================================
+        function renderA4Sheet() {
+            const grid = document.getElementById('a4-cards-grid');
+            const emptyOverlay = document.getElementById('a4-empty-overlay');
+            const counterBadge = document.getElementById('a4-counter-badge');
+
+            grid.innerHTML = '';
+            counterBadge.textContent = `${a4CardsList.length} بطاقات`;
+
+            if (a4CardsList.length === 0) {
+                emptyOverlay.classList.remove('hidden');
+                return;
+            }
+            emptyOverlay.classList.add('hidden');
+
+            a4CardsList.forEach((card, index) => {
+                const slot = document.createElement('div');
+                const isBeingEdited = (activeManualEditTarget?.type === 'a4' && activeManualEditTarget.targetKey === card.id) ||
+                                      (activeManualEditTarget?.type === 'staging' && activeManualEditTarget.targetKey === card.slotRef);
+
+                slot.className = `print-card-slot group ${isBeingEdited ? 'editing-active-ring' : ''}`;
+                slot.style.width = `${card.widthMM}mm`;
+                slot.style.height = `${card.heightMM}mm`;
+
+                slot.innerHTML = `
+                    <img src="${card.dataUrl}" alt="${card.label}">
+                    
+                    <!-- Hover Overlay Controls (Screen Only - Never Printed) -->
+                    <div class="card-actions-overlay no-print absolute inset-0 bg-slate-900/65 backdrop-blur-[1px] flex flex-col items-center justify-center gap-2 p-2">
+                        <span class="bg-slate-900/90 text-white text-[11px] font-bold px-2.5 py-0.5 rounded-full border border-slate-700">
+                            #${index + 1} - ${card.label} (${card.widthMM}×${card.heightMM} مم)
+                        </span>
+                        <div class="flex flex-wrap items-center justify-center gap-1.5">
+                            <button type="button" onclick="editA4CardCrop('${card.id}')" title="تعديل قص هذه البطاقة يدوياً" class="bg-amber-500 hover:bg-amber-400 text-slate-950 px-2.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1 shadow">
+                                <i class="fa-solid fa-pen-ruler"></i>
+                                <span>تعديل القص</span>
+                            </button>
+                            <button type="button" onclick="duplicateA4Card('${card.id}')" title="تكرار البطاقة" class="bg-blue-600 hover:bg-blue-500 text-white px-2.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1">
+                                <i class="fa-solid fa-clone"></i>
+                                <span>تكرار</span>
+                            </button>
+                            <button type="button" onclick="moveA4Card(${index}, -1)" title="تحريك لليمين" class="bg-slate-700 hover:bg-slate-600 text-white p-1.5 rounded-lg text-xs transition">
+                                <i class="fa-solid fa-arrow-right"></i>
+                            </button>
+                            <button type="button" onclick="moveA4Card(${index}, 1)" title="تحريك لليسار" class="bg-slate-700 hover:bg-slate-600 text-white p-1.5 rounded-lg text-xs transition">
+                                <i class="fa-solid fa-arrow-left"></i>
+                            </button>
+                            <button type="button" onclick="removeA4Card('${card.id}')" title="حذف من الورقة" class="bg-rose-600 hover:bg-rose-500 text-white px-2.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1">
+                                <i class="fa-solid fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                `;
+                grid.appendChild(slot);
+            });
+        }
+
+        function updateA4LayoutStyles() {
+            const gapMM = parseInt(document.getElementById('layout-gap-mm').value, 10);
+            const topMM = parseInt(document.getElementById('layout-top-mm').value, 10);
+            const showCutLines = document.getElementById('toggle-cut-lines').checked;
+            const showBorder = document.getElementById('toggle-card-border').checked;
+            const showGrid = document.getElementById('toggle-mm-grid').checked;
+
+            document.getElementById('val-gap-mm').textContent = `${gapMM} مم`;
+            document.getElementById('val-top-mm').textContent = `${topMM} مم`;
+
+            const grid = document.getElementById('a4-cards-grid');
+            grid.style.gap = `${gapMM}mm`;
+            grid.style.paddingTop = `${topMM}mm`;
+
+            const sheet = document.getElementById('a4-sheet');
+            sheet.classList.toggle('cut-guides-dashed', showCutLines);
+            sheet.classList.toggle('card-border-solid', showBorder);
+            sheet.classList.toggle('show-mm-grid', showGrid);
+        }
+
+        function removeA4Card(cardId) {
+            a4CardsList = a4CardsList.filter(c => c.id !== cardId);
+            renderA4Sheet();
+            showToast('تم حذف البطاقة من ورقة A4', 'info');
+        }
+
+        function duplicateA4Card(cardId) {
+            const idx = a4CardsList.findIndex(c => c.id === cardId);
+            if (idx === -1) return;
+            const orig = a4CardsList[idx];
+            const copy = {
+                ...orig,
+                id: 'card_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6)
+            };
+            a4CardsList.splice(idx + 1, 0, copy);
+            renderA4Sheet();
+            showToast('تم تكرار البطاقة على الورقة', 'success');
+        }
+
+        function moveA4Card(index, direction) {
+            const newIndex = index + direction;
+            if (newIndex < 0 || newIndex >= a4CardsList.length) return;
+            const temp = a4CardsList[index];
+            a4CardsList[index] = a4CardsList[newIndex];
+            a4CardsList[newIndex] = temp;
+            renderA4Sheet();
+        }
+
+        function clearAllA4Cards() {
+            if (a4CardsList.length === 0) return;
+            a4CardsList = [];
+            renderA4Sheet();
+            showToast('تم إفراغ ورقة الطباعة A4 بالكامل', 'warning');
+        }
+
+        // ==========================================
+        // 8. DIRECT PRINT & EXACT-MM 300-DPI PDF EXPORT
+        // ==========================================
+        function triggerDirectPrint() {
+            if (a4CardsList.length === 0) {
+                showToast('ورقة A4 فارغة! أضف بطاقة واحدة على الأقل قبل الطباعة.', 'warning');
+                return;
+            }
+            window.print();
+        }
+
+        /**
+         * Exports a true 300-DPI A4 PDF (210mm x 297mm) by placing each card at its exact
+         * mathematical millimeter coordinates using jsPDF, ensuring 100% physical measurement accuracy.
+         */
+        async function exportHighResPDF() {
+            if (a4CardsList.length === 0) {
+                showToast('ورقة A4 فارغة! أضف بطاقة واحدة على الأقل قبل تصدير ملف PDF.', 'warning');
+                return;
+            }
+
+            const btn = document.getElementById('btn-export-pdf');
+            const originalHtml = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i><span>جاري تجهيز PDF...</span>`;
+
+            try {
+                const { jsPDF } = window.jspdf;
+                const pdf = new jsPDF({
+                    orientation: 'portrait',
+                    unit: 'mm',
+                    format: 'a4',
+                    compress: true
+                });
+
+                const pageWidthMM = 210;
+                const pageHeightMM = 297;
+                const gapMM = parseFloat(document.getElementById('layout-gap-mm').value) || 4;
+                const topMarginMM = parseFloat(document.getElementById('layout-top-mm').value) || 12;
+                const showCutLines = document.getElementById('toggle-cut-lines').checked;
+                const showBorder = document.getElementById('toggle-card-border').checked;
+
+                // Layout cards in 2 columns (RTL: First card on Right, Second card on Left)
+                let currentY = topMarginMM;
+                let rowCards = [];
+                let currentRowWidth = 0;
+                const maxContentWidth = 186; // 210mm - 24mm side margins
+
+                // Group cards into rows that fit within A4 width
+                const rows = [];
+                for (const card of a4CardsList) {
+                    const neededWidth = rowCards.length === 0 ? card.widthMM : (currentRowWidth + gapMM + card.widthMM);
+                    if (neededWidth <= maxContentWidth) {
+                        rowCards.push(card);
+                        currentRowWidth = neededWidth;
+                    } else {
+                        rows.push({ cards: rowCards, totalWidth: currentRowWidth });
+                        rowCards = [card];
+                        currentRowWidth = card.widthMM;
+                    }
+                }
+                if (rowCards.length > 0) {
+                    rows.push({ cards: rowCards, totalWidth: currentRowWidth });
+                }
+
+                // Draw each row centered horizontally, ordered Right-to-Left
+                for (const row of rows) {
+                    const rowMaxHeight = Math.max(...row.cards.map(c => c.heightMM));
+
+                    // If row exceeds A4 bottom, add a new A4 page
+                    if (currentY + rowMaxHeight > pageHeightMM - 8) {
+                        pdf.addPage('a4', 'portrait');
+                        currentY = topMarginMM;
+                    }
+
+                    // Start from the right edge of the centered row block (for RTL matching)
+                    const rowRightEdgeX = (pageWidthMM + row.totalWidth) / 2;
+                    let cursorRightX = rowRightEdgeX;
+
+                    for (const card of row.cards) {
+                        const cardX = cursorRightX - card.widthMM;
+                        const cardY = currentY;
+
+                        // Place High-Res 300 DPI Image at exact millimeter coordinates
+                        pdf.addImage(card.dataUrl, 'JPEG', cardX, cardY, card.widthMM, card.heightMM);
+
+                        // Optional Solid Card Border
+                        if (showBorder) {
+                            pdf.setDrawColor(148, 163, 184);
+                            pdf.setLineWidth(0.2);
+                            pdf.rect(cardX, cardY, card.widthMM, card.heightMM);
+                        }
+
+                        // Optional Dashed Cut Guide Lines
+                        if (showCutLines) {
+                            pdf.setDrawColor(100, 116, 139);
+                            pdf.setLineWidth(0.25);
+                            pdf.setLineDashPattern([1.5, 1.5], 0);
+                            pdf.rect(cardX - 0.5, cardY - 0.5, card.widthMM + 1, card.heightMM + 1);
+                            pdf.setLineDashPattern([], 0);
+                        }
+
+                        cursorRightX = cardX - gapMM;
+                    }
+
+                    currentY += rowMaxHeight + gapMM;
+                }
+
+                const timestamp = new Date().toISOString().slice(0, 10);
+                pdf.save(`A4-ID-Cards-Print-${timestamp}.pdf`);
+                showToast('تم تصدير ملف PDF بدقة 300 DPI وبالأبعاد القياسية بنجاح!', 'success');
+            } catch (err) {
+                console.error(err);
+                showToast('حدث خطأ أثناء إنشاء ملف PDF، يرجى المحاولة مرة أخرى.', 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = originalHtml;
+            }
+        }
+    </script>
+</body>
+</html>
+```
